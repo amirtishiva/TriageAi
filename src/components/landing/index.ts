@@ -4,3 +4,4 @@ export { WorkflowSection } from './WorkflowSection';
 export { StatsSection } from './StatsSection';
 export { TrustSection } from './TrustSection';
 export { Footer } from './Footer';
+export { AnimatedSection, StaggerContainer, StaggerItem } from './AnimatedSection';

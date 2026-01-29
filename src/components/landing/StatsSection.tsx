@@ -1,3 +1,5 @@
+import { AnimatedSection, StaggerContainer, StaggerItem } from './AnimatedSection';
+
 const stats = [
   {
     value: '90.2',
@@ -34,35 +36,34 @@ export function StatsSection() {
     <section className="py-24 bg-muted/50">
       <div className="container mx-auto px-6">
         {/* Section Header */}
-        <div className="text-center mb-16">
+        <AnimatedSection className="text-center mb-16">
           <span className="text-xs font-semibold uppercase tracking-widest text-primary">
             Live Performance
           </span>
           <h2 className="mt-4 text-3xl md:text-4xl font-bold text-foreground">
             Operational Efficacy
           </h2>
-        </div>
+        </AnimatedSection>
 
         {/* Stats Grid */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-6 max-w-5xl mx-auto">
+        <StaggerContainer className="grid grid-cols-2 md:grid-cols-4 gap-6 max-w-5xl mx-auto">
           {stats.map((stat, index) => (
-            <div
-              key={index}
-              className="bg-card rounded-xl border border-border p-6 text-center"
-            >
-              <div className={`font-mono text-3xl md:text-4xl font-bold ${stat.color}`}>
-                {stat.value}
-                <span className="text-lg">{stat.unit}</span>
+            <StaggerItem key={index}>
+              <div className="bg-card rounded-xl border border-border p-6 text-center h-full">
+                <div className={`font-mono text-3xl md:text-4xl font-bold ${stat.color}`}>
+                  {stat.value}
+                  <span className="text-lg">{stat.unit}</span>
+                </div>
+                <div className="mt-3 text-xs font-semibold uppercase tracking-wide text-foreground">
+                  {stat.label}
+                </div>
+                <div className="mt-1 text-[10px] uppercase tracking-wider text-muted-foreground">
+                  {stat.sublabel}
+                </div>
               </div>
-              <div className="mt-3 text-xs font-semibold uppercase tracking-wide text-foreground">
-                {stat.label}
-              </div>
-              <div className="mt-1 text-[10px] uppercase tracking-wider text-muted-foreground">
-                {stat.sublabel}
-              </div>
-            </div>
+            </StaggerItem>
           ))}
-        </div>
+        </StaggerContainer>
       </div>
     </section>
   );

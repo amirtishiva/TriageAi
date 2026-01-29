@@ -1,4 +1,5 @@
 import { User, Lightbulb, Layers } from 'lucide-react';
+import { AnimatedSection, StaggerContainer, StaggerItem } from './AnimatedSection';
 
 const features = [
   {
@@ -33,54 +34,58 @@ export function TrustSection() {
     <section id="safety" className="py-24 bg-background">
       <div className="container mx-auto px-6">
         {/* Section Header */}
-        <div className="text-center mb-16">
+        <AnimatedSection className="text-center mb-16">
           <span className="text-xs font-semibold uppercase tracking-widest text-primary">
             Enterprise Trust
           </span>
           <h2 className="mt-4 text-3xl md:text-4xl font-bold text-foreground">
             Regulated Safety Framework
           </h2>
-        </div>
+        </AnimatedSection>
 
         {/* Feature Cards */}
-        <div className="grid md:grid-cols-3 gap-8 max-w-5xl mx-auto mb-16">
+        <StaggerContainer className="grid md:grid-cols-3 gap-8 max-w-5xl mx-auto mb-16">
           {features.map((feature) => (
-            <div key={feature.title} className="text-center md:text-left">
-              {/* Icon */}
-              <div className="inline-flex h-12 w-12 items-center justify-center rounded-xl bg-muted text-foreground mb-4">
-                <feature.icon className="h-6 w-6" />
+            <StaggerItem key={feature.title}>
+              <div className="text-center md:text-left">
+                {/* Icon */}
+                <div className="inline-flex h-12 w-12 items-center justify-center rounded-xl bg-muted text-foreground mb-4">
+                  <feature.icon className="h-6 w-6" />
+                </div>
+
+                {/* Title */}
+                <h3 className="text-lg font-semibold text-foreground mb-2">
+                  {feature.title}
+                </h3>
+
+                {/* Description */}
+                <p className="text-sm text-muted-foreground leading-relaxed">
+                  {feature.description}
+                </p>
               </div>
-
-              {/* Title */}
-              <h3 className="text-lg font-semibold text-foreground mb-2">
-                {feature.title}
-              </h3>
-
-              {/* Description */}
-              <p className="text-sm text-muted-foreground leading-relaxed">
-                {feature.description}
-              </p>
-            </div>
+            </StaggerItem>
           ))}
-        </div>
+        </StaggerContainer>
 
         {/* Compliance Badges */}
-        <div
-          id="compliance"
-          className="flex flex-wrap justify-center gap-8 pt-8 border-t border-border"
-        >
-          {badges.map((badge) => (
-            <div
-              key={badge.label}
-              className="flex items-center gap-2 text-muted-foreground"
-            >
-              <span className="text-lg">{badge.icon}</span>
-              <span className="text-xs font-medium uppercase tracking-wide">
-                {badge.label}
-              </span>
-            </div>
-          ))}
-        </div>
+        <AnimatedSection delay={0.3}>
+          <div
+            id="compliance"
+            className="flex flex-wrap justify-center gap-8 pt-8 border-t border-border"
+          >
+            {badges.map((badge) => (
+              <div
+                key={badge.label}
+                className="flex items-center gap-2 text-muted-foreground"
+              >
+                <span className="text-lg">{badge.icon}</span>
+                <span className="text-xs font-medium uppercase tracking-wide">
+                  {badge.label}
+                </span>
+              </div>
+            ))}
+          </div>
+        </AnimatedSection>
       </div>
     </section>
   );

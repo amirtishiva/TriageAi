@@ -14,11 +14,11 @@ interface NavItem {
 interface NavBarProps {
   items: NavItem[]
   className?: string
+  activeSection?: string
   onItemClick?: (url: string) => void
 }
 
-export function NavBar({ items, className, onItemClick }: NavBarProps) {
-  const [activeTab, setActiveTab] = useState(items[0]?.name)
+export function NavBar({ items, className, activeSection, onItemClick }: NavBarProps) {
   const [isMobile, setIsMobile] = useState(false)
 
   useEffect(() => {
@@ -31,8 +31,12 @@ export function NavBar({ items, className, onItemClick }: NavBarProps) {
     return () => window.removeEventListener("resize", handleResize)
   }, [])
 
+  // Determine active tab - use activeSection if provided, otherwise first item
+  const activeTab = activeSection 
+    ? items.find(item => item.url === activeSection)?.name || items[0]?.name
+    : items[0]?.name
+
   const handleClick = (item: NavItem) => {
-    setActiveTab(item.name)
     onItemClick?.(item.url)
   }
 

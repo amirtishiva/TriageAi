@@ -2,6 +2,7 @@ import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { NavBar } from '@/components/ui/tubelight-navbar';
 import { Activity, GitBranch, Shield, FileCheck, BookOpen } from 'lucide-react';
+import { useScrollSpy } from '@/hooks/useScrollSpy';
 
 const navItems = [
   { name: 'Workflow', url: '#workflow', icon: GitBranch },
@@ -10,8 +11,11 @@ const navItems = [
   { name: 'Documentation', url: '#documentation', icon: BookOpen },
 ];
 
+const sectionIds = navItems.map(item => item.url);
+
 export function Navbar() {
   const navigate = useNavigate();
+  const activeSection = useScrollSpy(sectionIds, 150);
 
   const handleNavClick = (href: string) => {
     if (href.startsWith('#')) {
@@ -33,12 +37,12 @@ export function Navbar() {
 
         {/* Tubelight Nav Items */}
         <nav className="hidden md:flex">
-          <NavBar items={navItems} onItemClick={handleNavClick} />
+          <NavBar items={navItems} activeSection={activeSection} onItemClick={handleNavClick} />
         </nav>
 
         {/* Mobile Nav - simplified */}
         <nav className="flex md:hidden">
-          <NavBar items={navItems} onItemClick={handleNavClick} />
+          <NavBar items={navItems} activeSection={activeSection} onItemClick={handleNavClick} />
         </nav>
 
         {/* Sign In */}
