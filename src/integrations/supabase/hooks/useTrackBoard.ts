@@ -1,6 +1,7 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useEffect } from 'react';
+import { Session } from '@supabase/supabase-js';
 
 interface TrackBoardFilters {
   esiLevels?: number[];
@@ -64,8 +65,16 @@ interface TrackBoardResponse {
   };
 }
 
-export function useTrackBoard(filters?: TrackBoardFilters) {
+interface UseTrackBoardOptions extends TrackBoardFilters {
+  session?: Session | null;
+}
+
+export function useTrackBoard(options?: UseTrackBoardOptions) {
   const queryClient = useQueryClient();
+  const { session, ...filters } = options || {};
+  
+  // Only run the query when there's a valid session
+  const isAuthenticated = !!session?.access_token;
 
   const query = useQuery({
     queryKey: ['track-board', filters],
@@ -80,12 +89,15 @@ export function useTrackBoard(filters?: TrackBoardFilters) {
 
       return data as TrackBoardResponse;
     },
-    refetchInterval: 30000, // Refresh every 30 seconds
+    enabled: isAuthenticated, // Only fetch when authenticated
+    refetchInterval: isAuthenticated ? 30000 : false, // Refresh every 30 seconds only when authenticated
     staleTime: 10000, // Consider data stale after 10 seconds
   });
 
-  // Subscribe to real-time updates
+  // Subscribe to real-time updates only when authenticated
   useEffect(() => {
+    if (!isAuthenticated) return;
+    
     const channel = supabase
       .channel('track-board-updates')
       .on(
@@ -105,7 +117,7 @@ export function useTrackBoard(filters?: TrackBoardFilters) {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [queryClient]);
+  }, [queryClient, isAuthenticated]);
 
   return query;
 }

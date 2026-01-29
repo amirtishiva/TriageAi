@@ -45,7 +45,7 @@ import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 
 export default function TrackBoard() {
-  const { user } = useAuth();
+  const { user, session } = useAuth();
   const { activateEmergencyMode, deactivateEmergencyMode, checkCriticalState } = useEmergency();
   const acknowledgeMutation = useAcknowledgeCase();
   
@@ -56,9 +56,10 @@ export default function TrackBoard() {
   const [selectedCase, setSelectedCase] = useState<TrackBoardCase | null>(null);
   const [isAcknowledging, setIsAcknowledging] = useState(false);
 
-  // Fetch track board data with filters
+  // Fetch track board data with filters - only when authenticated
   const { data: trackBoardData, isLoading, refetch, isRefetching } = useTrackBoard({
     esiLevels: filterESI === 'all' ? undefined : [filterESI],
+    session, // Pass session to enable the query only when authenticated
   });
 
   // Filter and sort cases client-side for search
