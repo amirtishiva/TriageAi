@@ -26,7 +26,8 @@ import {
   Settings,
   ChevronLeft,
   AlertTriangle,
-  Loader2
+  Loader2,
+  LogOut
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/contexts/AuthContext';
@@ -45,6 +46,7 @@ function PhysicianSidebar() {
   const location = useLocation();
   const navigate = useNavigate();
   const { state } = useSidebar();
+  const { signOut } = useAuth();
   const collapsed = state === 'collapsed';
 
   const isActive = (path: string) => {
@@ -52,6 +54,11 @@ function PhysicianSidebar() {
       return location.pathname === '/physician';
     }
     return location.pathname.startsWith(path);
+  };
+
+  const handleSignOut = async () => {
+    await signOut();
+    navigate('/auth', { replace: true });
   };
 
   return (
@@ -146,6 +153,20 @@ function PhysicianSidebar() {
               </button>
             </SidebarMenuButton>
           </SidebarMenuItem>
+          <SidebarMenuItem>
+            <SidebarMenuButton 
+              asChild
+              tooltip="Sign Out"
+            >
+              <button 
+                onClick={handleSignOut}
+                className="flex items-center gap-3 rounded-md px-3 py-2 text-sidebar-foreground hover:bg-destructive/10 hover:text-destructive w-full"
+              >
+                <LogOut className="h-4 w-4 shrink-0" />
+                {!collapsed && <span className="text-sm">Sign Out</span>}
+              </button>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
         </SidebarMenu>
       </SidebarFooter>
     </Sidebar>
@@ -154,6 +175,12 @@ function PhysicianSidebar() {
 
 function PhysicianHeader() {
   const [criticalCount] = useState(1);
+  const { user } = useAuth();
+
+  // Get user initials from email
+  const userInitials = user?.email 
+    ? user.email.substring(0, 2).toUpperCase() 
+    : 'DR';
 
   return (
     <header className="flex h-14 items-center justify-between border-b bg-card px-4">
@@ -188,9 +215,11 @@ function PhysicianHeader() {
 
         <div className="flex items-center gap-2 rounded-full bg-purple-500/10 px-3 py-1.5 border border-purple-500/20">
           <div className="h-6 w-6 rounded-full bg-purple-600 flex items-center justify-center text-white text-xs font-medium">
-            JM
+            {userInitials}
           </div>
-          <span className="text-sm font-medium hidden sm:block text-purple-400">Dr. James Mitchell</span>
+          <span className="text-sm font-medium hidden sm:block text-purple-400 truncate max-w-[150px]">
+            {user?.email || 'Physician'}
+          </span>
         </div>
       </div>
     </header>
@@ -198,7 +227,7 @@ function PhysicianHeader() {
 }
 
 export default function PhysicianLayout() {
-  const { session, loading } = useAuth();
+  const { session, loading, hasRole } = useAuth();
   const navigate = useNavigate();
 
   // Redirect to auth if not authenticated
@@ -207,6 +236,13 @@ export default function PhysicianLayout() {
       navigate('/auth', { replace: true });
     }
   }, [session, loading, navigate]);
+
+  // Redirect if user doesn't have physician role
+  useEffect(() => {
+    if (!loading && session && !hasRole('physician') && !hasRole('senior_physician')) {
+      navigate('/', { replace: true });
+    }
+  }, [session, loading, hasRole, navigate]);
 
   // Show loading state while checking auth
   if (loading) {

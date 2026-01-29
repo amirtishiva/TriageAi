@@ -1,6 +1,7 @@
-import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
-import { User, Session } from '@supabase/supabase-js';
+import { createContext, useContext, useEffect, useState, ReactNode, useCallback } from 'react';
+import { User, Session, AuthError } from '@supabase/supabase-js';
 import { supabase } from '@/integrations/supabase/client';
+import { useToast } from '@/hooks/use-toast';
 import type { Database } from '@/integrations/supabase/types';
 
 type AppRole = Database['public']['Enums']['app_role'];
@@ -35,9 +36,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [currentRole, setCurrentRole] = useState<AppRole | null>(null);
   const [zone, setZone] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const { toast } = useToast();
 
   // Fetch user roles
-  const fetchUserRoles = async (userId: string) => {
+  const fetchUserRoles = useCallback(async (userId: string) => {
     const { data, error } = await supabase
       .from('user_roles')
       .select('*')
@@ -49,30 +51,64 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     return (data || []) as UserRole[];
-  };
+  }, []);
+
+  // Handle session timeout / token refresh errors
+  const handleAuthError = useCallback((error: AuthError) => {
+    if (error.message.includes('refresh_token') || 
+        error.message.includes('session') ||
+        error.status === 401) {
+      toast({
+        title: 'Session Expired',
+        description: 'Your session has expired. Please sign in again.',
+        variant: 'destructive',
+      });
+      // Clear local state
+      setUser(null);
+      setSession(null);
+      setUserRoles([]);
+      setCurrentRole(null);
+      setZone(null);
+    }
+  }, [toast]);
 
   useEffect(() => {
     // Set up auth state listener
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       (event, newSession) => {
-        setSession(newSession);
-        setUser(newSession?.user ?? null);
-
-        // Fetch roles after auth state change
-        if (newSession?.user) {
-          setTimeout(() => {
-            fetchUserRoles(newSession.user.id).then(roles => {
-              setUserRoles(roles);
-              if (roles.length > 0 && !currentRole) {
-                setCurrentRole(roles[0].role);
-                setZone(roles[0].zone);
-              }
-            });
-          }, 0);
-        } else {
+        // Handle specific auth events
+        if (event === 'TOKEN_REFRESHED') {
+          // Token was successfully refreshed
+          setSession(newSession);
+          setUser(newSession?.user ?? null);
+        } else if (event === 'SIGNED_OUT') {
+          // User signed out
+          setSession(null);
+          setUser(null);
           setUserRoles([]);
           setCurrentRole(null);
           setZone(null);
+        } else {
+          // Other events (SIGNED_IN, INITIAL_SESSION, etc.)
+          setSession(newSession);
+          setUser(newSession?.user ?? null);
+
+          // Fetch roles after auth state change
+          if (newSession?.user) {
+            setTimeout(() => {
+              fetchUserRoles(newSession.user.id).then(roles => {
+                setUserRoles(roles);
+                if (roles.length > 0 && !currentRole) {
+                  setCurrentRole(roles[0].role);
+                  setZone(roles[0].zone);
+                }
+              });
+            }, 0);
+          } else {
+            setUserRoles([]);
+            setCurrentRole(null);
+            setZone(null);
+          }
         }
       }
     );

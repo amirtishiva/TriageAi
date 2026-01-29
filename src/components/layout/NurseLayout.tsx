@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { 
   SidebarProvider, 
@@ -25,9 +25,11 @@ import {
   Stethoscope,
   Users,
   LogOut,
-  ChevronLeft
+  ChevronLeft,
+  Loader2
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useAuth } from '@/contexts/AuthContext';
 
 const nurseNavItems = [
   { title: 'Dashboard', url: '/nurse', icon: LayoutDashboard },
@@ -40,6 +42,7 @@ function NurseSidebar() {
   const location = useLocation();
   const navigate = useNavigate();
   const { state } = useSidebar();
+  const { signOut } = useAuth();
   const collapsed = state === 'collapsed';
 
   const isActive = (path: string) => {
@@ -47,6 +50,11 @@ function NurseSidebar() {
       return location.pathname === '/nurse';
     }
     return location.pathname.startsWith(path);
+  };
+
+  const handleSignOut = async () => {
+    await signOut();
+    navigate('/auth', { replace: true });
   };
 
   return (
@@ -111,6 +119,20 @@ function NurseSidebar() {
               </button>
             </SidebarMenuButton>
           </SidebarMenuItem>
+          <SidebarMenuItem>
+            <SidebarMenuButton 
+              asChild
+              tooltip="Sign Out"
+            >
+              <button 
+                onClick={handleSignOut}
+                className="flex items-center gap-3 rounded-md px-3 py-2 text-sidebar-foreground hover:bg-destructive/10 hover:text-destructive w-full"
+              >
+                <LogOut className="h-4 w-4 shrink-0" />
+                {!collapsed && <span className="text-sm">Sign Out</span>}
+              </button>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
         </SidebarMenu>
       </SidebarFooter>
     </Sidebar>
@@ -119,6 +141,12 @@ function NurseSidebar() {
 
 function NurseHeader() {
   const [alertCount] = useState(2);
+  const { user, zone } = useAuth();
+
+  // Get user initials from email
+  const userInitials = user?.email 
+    ? user.email.substring(0, 2).toUpperCase() 
+    : 'NA';
 
   return (
     <header className="flex h-14 items-center justify-between border-b bg-card px-4">
@@ -126,7 +154,9 @@ function NurseHeader() {
         <SidebarTrigger className="text-muted-foreground hover:text-foreground" aria-label="Toggle sidebar" />
         <div className="hidden sm:flex items-center gap-2">
           <div className="h-2 w-2 rounded-full bg-clinical-cyan animate-pulse" />
-          <h2 className="text-sm font-medium text-muted-foreground">Nurse Station Active</h2>
+          <h2 className="text-sm font-medium text-muted-foreground">
+            Nurse Station Active {zone && `• Zone ${zone}`}
+          </h2>
         </div>
       </div>
 
@@ -145,9 +175,11 @@ function NurseHeader() {
 
         <div className="flex items-center gap-2 rounded-full bg-clinical-cyan/10 px-3 py-1.5 border border-clinical-cyan/20">
           <div className="h-6 w-6 rounded-full bg-clinical-cyan flex items-center justify-center text-primary-foreground text-xs font-medium">
-            SC
+            {userInitials}
           </div>
-          <span className="text-sm font-medium hidden sm:block text-clinical-cyan">Sarah Chen, RN</span>
+          <span className="text-sm font-medium hidden sm:block text-clinical-cyan truncate max-w-[150px]">
+            {user?.email || 'Nurse'}
+          </span>
         </div>
       </div>
     </header>
@@ -155,6 +187,40 @@ function NurseHeader() {
 }
 
 export default function NurseLayout() {
+  const { session, loading, hasRole } = useAuth();
+  const navigate = useNavigate();
+
+  // Redirect to auth if not authenticated
+  useEffect(() => {
+    if (!loading && !session) {
+      navigate('/auth', { replace: true });
+    }
+  }, [session, loading, navigate]);
+
+  // Redirect if user doesn't have nurse role
+  useEffect(() => {
+    if (!loading && session && !hasRole('nurse') && !hasRole('charge_nurse')) {
+      navigate('/', { replace: true });
+    }
+  }, [session, loading, hasRole, navigate]);
+
+  // Show loading state while checking auth
+  if (loading) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-background">
+        <div className="flex flex-col items-center gap-4">
+          <Loader2 className="h-8 w-8 animate-spin text-clinical-cyan" />
+          <p className="text-muted-foreground">Loading...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Don't render content until authenticated
+  if (!session) {
+    return null;
+  }
+
   return (
     <SidebarProvider>
       <div className="flex min-h-screen w-full">
