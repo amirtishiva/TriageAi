@@ -11,6 +11,7 @@ import NurseLayout from "./components/layout/NurseLayout";
 import PhysicianLayout from "./components/layout/PhysicianLayout";
 
 // Pages
+import LandingPage from "./pages/LandingPage";
 import RolePortal from "./pages/RolePortal";
 import AuthPage from "./pages/AuthPage";
 import NurseDashboard from "./pages/NurseDashboard";
@@ -33,8 +34,9 @@ const App = () => (
           <Sonner />
           <BrowserRouter>
             <Routes>
-              {/* Role Selection Portal */}
-              <Route path="/" element={<RolePortal />} />
+              {/* Landing Page */}
+              <Route path="/" element={<LandingPage />} />
+              <Route path="/portal" element={<RolePortal />} />
               <Route path="/auth" element={<AuthPage />} />
 
               {/* Nurse Station Routes */}
