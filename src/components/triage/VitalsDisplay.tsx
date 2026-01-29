@@ -1,4 +1,3 @@
-import { forwardRef } from 'react';
 import { cn } from '@/lib/utils';
 import { VitalSigns } from '@/types/triage';
 import { Heart, Wind, Thermometer, Droplets, Activity, Gauge } from 'lucide-react';
@@ -7,7 +6,6 @@ interface VitalsDisplayProps {
   vitals: VitalSigns;
   layout?: 'grid' | 'inline' | 'compact';
   showLabels?: boolean;
-  className?: string;
 }
 
 interface VitalItemProps {
@@ -25,6 +23,12 @@ function VitalItem({ icon, label, value, unit, status, layout, showLabel = true 
     normal: 'vitals-normal',
     warning: 'vitals-warning',
     critical: 'vitals-critical',
+  };
+
+  const statusTextColor = {
+    normal: 'text-vitals-normal',
+    warning: 'text-vitals-warning',
+    critical: 'text-vitals-critical',
   };
 
   if (layout === 'compact') {
@@ -56,13 +60,15 @@ function VitalItem({ icon, label, value, unit, status, layout, showLabel = true 
   }
 
   return (
-    <div className={cn('vitals-card rounded-lg', statusClasses[status])}>
+    <div className={cn('vitals-card rounded-xl', statusClasses[status])}>
       <div className="flex items-center justify-between mb-2">
-        <span className="section-label">{label}</span>
+        <span className="text-xs font-medium uppercase tracking-wide opacity-70">{label}</span>
         <span className="opacity-70">{icon}</span>
       </div>
       <div className="flex items-baseline gap-1">
-        <span className="font-mono text-2xl font-bold">{value}</span>
+        <span className={cn('font-mono text-2xl font-bold', statusTextColor[status])}>
+          {value}
+        </span>
         <span className="text-xs opacity-60">{unit}</span>
       </div>
     </div>
@@ -100,117 +106,109 @@ function getVitalStatus(type: string, value: number): 'normal' | 'warning' | 'cr
   }
 }
 
-export const VitalsDisplay = forwardRef<HTMLDivElement, VitalsDisplayProps>(
-  ({ vitals, layout = 'grid', showLabels = true, className }, ref) => {
-    const iconClass = layout === 'compact' ? 'h-3.5 w-3.5' : 'h-4 w-4';
+export function VitalsDisplay({ vitals, layout = 'grid', showLabels = true }: VitalsDisplayProps) {
+  const iconClass = layout === 'compact' ? 'h-3.5 w-3.5' : 'h-4 w-4';
 
-    const vitalsData = [
-      {
-        icon: <Heart className={iconClass} />,
-        label: 'Heart Rate',
-        value: vitals.heartRate,
-        unit: 'BPM',
-        status: getVitalStatus('hr', vitals.heartRate),
-      },
-      {
-        icon: <Gauge className={iconClass} />,
-        label: 'Blood Pressure',
-        value: `${vitals.bloodPressure.systolic}/${vitals.bloodPressure.diastolic}`,
-        unit: 'mmHg',
-        status: getVitalStatus('systolic', vitals.bloodPressure.systolic),
-      },
-      {
-        icon: <Droplets className={iconClass} />,
-        label: 'SpO2',
-        value: vitals.oxygenSaturation,
-        unit: '%',
-        status: getVitalStatus('spo2', vitals.oxygenSaturation),
-      },
-      {
-        icon: <Wind className={iconClass} />,
-        label: 'Resp Rate',
-        value: vitals.respiratoryRate,
-        unit: 'RR',
-        status: getVitalStatus('rr', vitals.respiratoryRate),
-      },
-      {
-        icon: <Thermometer className={iconClass} />,
-        label: 'Temperature',
-        value: vitals.temperature.toFixed(1),
-        unit: '°F',
-        status: getVitalStatus('temp', vitals.temperature),
-      },
-      {
-        icon: <Activity className={iconClass} />,
-        label: 'Pain Level',
-        value: vitals.painLevel,
-        unit: '/10',
-        status: getVitalStatus('pain', vitals.painLevel),
-      },
-    ];
+  const vitalsData = [
+    {
+      icon: <Heart className={iconClass} />,
+      label: 'Heart Rate',
+      value: vitals.heartRate,
+      unit: 'BPM',
+      status: getVitalStatus('hr', vitals.heartRate),
+    },
+    {
+      icon: <Gauge className={iconClass} />,
+      label: 'Blood Pressure',
+      value: `${vitals.bloodPressure.systolic}/${vitals.bloodPressure.diastolic}`,
+      unit: 'mmHg',
+      status: getVitalStatus('systolic', vitals.bloodPressure.systolic),
+    },
+    {
+      icon: <Droplets className={iconClass} />,
+      label: 'SpO2',
+      value: vitals.oxygenSaturation,
+      unit: '%',
+      status: getVitalStatus('spo2', vitals.oxygenSaturation),
+    },
+    {
+      icon: <Wind className={iconClass} />,
+      label: 'Resp Rate',
+      value: vitals.respiratoryRate,
+      unit: 'RR',
+      status: getVitalStatus('rr', vitals.respiratoryRate),
+    },
+    {
+      icon: <Thermometer className={iconClass} />,
+      label: 'Temperature',
+      value: vitals.temperature.toFixed(1),
+      unit: '°F',
+      status: getVitalStatus('temp', vitals.temperature),
+    },
+    {
+      icon: <Activity className={iconClass} />,
+      label: 'Pain Level',
+      value: vitals.painLevel,
+      unit: '/10',
+      status: getVitalStatus('pain', vitals.painLevel),
+    },
+  ];
 
-    if (layout === 'compact') {
-      return (
-        <div ref={ref} className={cn('flex flex-wrap gap-2', className)}>
-          {vitalsData.map((vital) => (
-            <VitalItem key={vital.label} {...vital} layout={layout} showLabel={showLabels} />
-          ))}
-        </div>
-      );
-    }
-
-    if (layout === 'inline') {
-      return (
-        <div ref={ref} className={cn('flex flex-wrap gap-3', className)}>
-          {vitalsData.map((vital) => (
-            <VitalItem key={vital.label} {...vital} layout={layout} showLabel={showLabels} />
-          ))}
-        </div>
-      );
-    }
-
+  if (layout === 'compact') {
     return (
-      <div ref={ref} className={cn('grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3', className)}>
+      <div className="flex flex-wrap gap-2">
         {vitalsData.map((vital) => (
           <VitalItem key={vital.label} {...vital} layout={layout} showLabel={showLabels} />
         ))}
       </div>
     );
   }
-);
 
-VitalsDisplay.displayName = 'VitalsDisplay';
-
-// Compact horizontal vitals for headers
-export const VitalsBar = forwardRef<HTMLDivElement, { vitals: VitalSigns; className?: string }>(
-  ({ vitals, className }, ref) => {
-    const items = [
-      { label: 'HR', value: vitals.heartRate, unit: '', status: getVitalStatus('hr', vitals.heartRate) },
-      { label: 'BP', value: `${vitals.bloodPressure.systolic}/${vitals.bloodPressure.diastolic}`, unit: '', status: getVitalStatus('systolic', vitals.bloodPressure.systolic) },
-      { label: 'SpO2', value: vitals.oxygenSaturation, unit: '%', status: getVitalStatus('spo2', vitals.oxygenSaturation) },
-      { label: 'RR', value: vitals.respiratoryRate, unit: '', status: getVitalStatus('rr', vitals.respiratoryRate) },
-    ];
-
-    const statusColor = {
-      normal: 'text-[hsl(var(--vitals-normal))]',
-      warning: 'text-[hsl(var(--vitals-warning))]',
-      critical: 'text-[hsl(var(--vitals-critical))]',
-    };
-
+  if (layout === 'inline') {
     return (
-      <div ref={ref} className={cn('flex items-center gap-4 text-sm', className)}>
-        {items.map((item, i) => (
-          <div key={item.label} className="flex items-center gap-1.5">
-            <span className="text-muted-foreground text-xs">{item.label}:</span>
-            <span className={cn('font-mono font-semibold', statusColor[item.status])}>
-              {item.value}{item.unit}
-            </span>
-            {i < items.length - 1 && <span className="text-border ml-2">•</span>}
-          </div>
+      <div className="flex flex-wrap gap-3">
+        {vitalsData.map((vital) => (
+          <VitalItem key={vital.label} {...vital} layout={layout} showLabel={showLabels} />
         ))}
       </div>
     );
   }
-);
 
-VitalsBar.displayName = 'VitalsBar';
+  return (
+    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+      {vitalsData.map((vital) => (
+        <VitalItem key={vital.label} {...vital} layout={layout} showLabel={showLabels} />
+      ))}
+    </div>
+  );
+}
+
+// Compact horizontal vitals for headers
+export function VitalsBar({ vitals }: { vitals: VitalSigns }) {
+  const items = [
+    { label: 'HR', value: vitals.heartRate, unit: '', status: getVitalStatus('hr', vitals.heartRate) },
+    { label: 'BP', value: `${vitals.bloodPressure.systolic}/${vitals.bloodPressure.diastolic}`, unit: '', status: getVitalStatus('systolic', vitals.bloodPressure.systolic) },
+    { label: 'SpO2', value: vitals.oxygenSaturation, unit: '%', status: getVitalStatus('spo2', vitals.oxygenSaturation) },
+    { label: 'RR', value: vitals.respiratoryRate, unit: '', status: getVitalStatus('rr', vitals.respiratoryRate) },
+  ];
+
+  const statusColor = {
+    normal: 'text-vitals-normal',
+    warning: 'text-vitals-warning',
+    critical: 'text-vitals-critical',
+  };
+
+  return (
+    <div className="flex items-center gap-4 text-sm">
+      {items.map((item, i) => (
+        <div key={item.label} className="flex items-center gap-1.5">
+          <span className="text-muted-foreground text-xs">{item.label}:</span>
+          <span className={cn('font-mono font-semibold', statusColor[item.status])}>
+            {item.value}{item.unit}
+          </span>
+          {i < items.length - 1 && <span className="text-border ml-2">•</span>}
+        </div>
+      ))}
+    </div>
+  );
+}

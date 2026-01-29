@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Card, CardContent } from '@/components/ui/card';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -20,10 +20,10 @@ import {
   FileUp, 
   Search, 
   CheckCircle2,
+  AlertTriangle,
   Loader2,
   X,
-  File,
-  FileText
+  File
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { VitalSigns } from '@/types/triage';
@@ -69,6 +69,7 @@ export default function PatientIntakePage() {
     if (!formData.mrn) return;
     setIsSearching(true);
     
+    // Simulate search
     setTimeout(() => {
       setIsSearching(false);
       if (formData.mrn === 'MRN-2024-002') {
@@ -106,37 +107,38 @@ export default function PatientIntakePage() {
   };
 
   const handleStartTriage = () => {
+    // In a real app, this would save the patient and navigate to triage
     navigate('/triage/new-patient');
   };
 
   const steps = [
     { id: 'demographics', label: 'Demographics', icon: User },
     { id: 'vitals', label: 'Vital Signs', icon: Heart },
-    { id: 'complaint', label: 'Chief Complaint', icon: FileText },
+    { id: 'complaint', label: 'Chief Complaint', icon: AlertTriangle },
     { id: 'documents', label: 'Documents', icon: FileUp },
   ];
 
   const currentStepIndex = steps.findIndex(s => s.id === step);
 
   return (
-    <div className="max-w-3xl mx-auto space-y-6">
+    <div className="max-w-4xl mx-auto space-y-6 animate-fade-in-up">
       {/* Header */}
       <div className="flex items-center gap-4">
-        <Button variant="ghost" size="icon" onClick={() => navigate(-1)} className="h-8 w-8">
-          <ArrowLeft className="h-4 w-4" />
+        <Button variant="ghost" size="icon" onClick={() => navigate(-1)}>
+          <ArrowLeft className="h-5 w-5" />
         </Button>
         <div>
-          <h1 className="text-xl font-bold">New Patient Intake</h1>
-          <p className="text-sm text-muted-foreground">Register patient and capture initial information</p>
+          <h1 className="text-2xl font-bold">New Patient Intake</h1>
+          <p className="text-muted-foreground">Register patient and capture initial information</p>
         </div>
       </div>
 
       {/* Progress Steps */}
-      <div className="flex items-center justify-between relative px-4">
-        <div className="absolute top-4 left-8 right-8 h-px bg-border" />
+      <div className="flex items-center justify-between relative">
+        <div className="absolute top-5 left-0 right-0 h-0.5 bg-muted -z-10" />
         <div 
-          className="absolute top-4 left-8 h-px bg-primary transition-all duration-500"
-          style={{ width: `calc(${(currentStepIndex / (steps.length - 1)) * 100}% - 2rem)` }}
+          className="absolute top-5 left-0 h-0.5 bg-primary -z-10 transition-all duration-500"
+          style={{ width: `${(currentStepIndex / (steps.length - 1)) * 100}%` }}
         />
         
         {steps.map((s, i) => {
@@ -150,20 +152,20 @@ export default function PatientIntakePage() {
               className="flex flex-col items-center gap-2 z-10"
             >
               <div className={cn(
-                'w-8 h-8 rounded-full flex items-center justify-center transition-all text-sm',
+                'w-10 h-10 rounded-full flex items-center justify-center transition-all',
                 isComplete && 'bg-primary text-primary-foreground',
-                isActive && 'bg-primary text-primary-foreground ring-2 ring-primary/30 ring-offset-2 ring-offset-background',
+                isActive && 'bg-primary text-primary-foreground ring-4 ring-primary/20',
                 !isActive && !isComplete && 'bg-muted text-muted-foreground'
               )}>
                 {isComplete ? (
-                  <CheckCircle2 className="h-4 w-4" />
+                  <CheckCircle2 className="h-5 w-5" />
                 ) : (
-                  <s.icon className="h-4 w-4" />
+                  <s.icon className="h-5 w-5" />
                 )}
               </div>
               <span className={cn(
                 'text-xs font-medium',
-                isActive ? 'text-foreground' : 'text-muted-foreground'
+                isActive ? 'text-primary' : 'text-muted-foreground'
               )}>
                 {s.label}
               </span>
@@ -179,31 +181,32 @@ export default function PatientIntakePage() {
           {step === 'demographics' && (
             <div className="space-y-6">
               {/* MRN Search */}
-              <div className="p-4 bg-muted/40 rounded-lg border border-border/50">
-                <Label className="section-label mb-2 block">Search Existing Patient (Optional)</Label>
+              <div className="p-4 bg-muted/50 rounded-lg">
+                <Label className="text-sm font-medium mb-2 block">
+                  Search Existing Patient (Optional)
+                </Label>
                 <div className="flex gap-2">
                   <Input
                     placeholder="Enter MRN..."
                     value={formData.mrn}
                     onChange={(e) => setFormData(prev => ({ ...prev, mrn: e.target.value }))}
-                    className="max-w-xs input-clinical"
+                    className="max-w-xs"
                   />
                   <Button 
                     variant="secondary" 
                     onClick={handleMRNSearch}
                     disabled={isSearching || !formData.mrn}
-                    className="gap-2"
                   >
                     {isSearching ? (
                       <Loader2 className="h-4 w-4 animate-spin" />
                     ) : (
                       <Search className="h-4 w-4" />
                     )}
-                    Search
+                    <span className="ml-2">Search</span>
                   </Button>
                 </div>
                 {patientFound && (
-                  <div className="mt-3 flex items-center gap-2 text-sm text-[hsl(var(--confidence-high))]">
+                  <div className="mt-3 flex items-center gap-2 text-sm text-confidence-high">
                     <CheckCircle2 className="h-4 w-4" />
                     Patient found - data auto-populated
                   </div>
@@ -213,42 +216,39 @@ export default function PatientIntakePage() {
               {/* Patient Info Form */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label htmlFor="firstName" className="text-sm">First Name <span className="text-[hsl(var(--esi-1))]">*</span></Label>
+                  <Label htmlFor="firstName">First Name *</Label>
                   <Input
                     id="firstName"
                     value={formData.firstName}
                     onChange={(e) => setFormData(prev => ({ ...prev, firstName: e.target.value }))}
                     placeholder="Enter first name"
-                    className="input-clinical"
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="lastName" className="text-sm">Last Name <span className="text-[hsl(var(--esi-1))]">*</span></Label>
+                  <Label htmlFor="lastName">Last Name *</Label>
                   <Input
                     id="lastName"
                     value={formData.lastName}
                     onChange={(e) => setFormData(prev => ({ ...prev, lastName: e.target.value }))}
                     placeholder="Enter last name"
-                    className="input-clinical"
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="dob" className="text-sm">Date of Birth <span className="text-[hsl(var(--esi-1))]">*</span></Label>
+                  <Label htmlFor="dob">Date of Birth *</Label>
                   <Input
                     id="dob"
                     type="date"
                     value={formData.dateOfBirth}
                     onChange={(e) => setFormData(prev => ({ ...prev, dateOfBirth: e.target.value }))}
-                    className="input-clinical"
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="gender" className="text-sm">Gender <span className="text-[hsl(var(--esi-1))]">*</span></Label>
+                  <Label htmlFor="gender">Gender *</Label>
                   <Select 
                     value={formData.gender} 
                     onValueChange={(v) => setFormData(prev => ({ ...prev, gender: v }))}
                   >
-                    <SelectTrigger className="input-clinical">
+                    <SelectTrigger>
                       <SelectValue placeholder="Select gender" />
                     </SelectTrigger>
                     <SelectContent>
@@ -262,18 +262,17 @@ export default function PatientIntakePage() {
 
               {/* Allergies */}
               <div className="space-y-2">
-                <Label htmlFor="allergies" className="text-sm">Known Allergies</Label>
+                <Label htmlFor="allergies">Known Allergies</Label>
                 <Input
                   id="allergies"
                   value={formData.allergies}
                   onChange={(e) => setFormData(prev => ({ ...prev, allergies: e.target.value }))}
                   placeholder="e.g., Penicillin, Sulfa drugs (or NKDA)"
-                  className="input-clinical"
                 />
               </div>
 
               {/* Navigation */}
-              <div className="flex justify-end pt-2">
+              <div className="flex justify-end">
                 <Button onClick={() => setStep('vitals')}>
                   Continue to Vitals
                 </Button>
@@ -286,17 +285,17 @@ export default function PatientIntakePage() {
             <div className="space-y-6">
               <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
                 <div className="space-y-2">
-                  <Label className="section-label">Heart Rate (bpm)</Label>
+                  <Label>Heart Rate (bpm)</Label>
                   <Input
                     type="number"
                     value={vitals.heartRate || ''}
                     onChange={(e) => setVitals(prev => ({ ...prev, heartRate: +e.target.value }))}
                     placeholder="72"
-                    className="input-vitals"
+                    className="font-vitals"
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label className="section-label">Systolic BP (mmHg)</Label>
+                  <Label>Systolic BP (mmHg)</Label>
                   <Input
                     type="number"
                     value={vitals.bloodPressure.systolic || ''}
@@ -305,11 +304,11 @@ export default function PatientIntakePage() {
                       bloodPressure: { ...prev.bloodPressure, systolic: +e.target.value }
                     }))}
                     placeholder="120"
-                    className="input-vitals"
+                    className="font-vitals"
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label className="section-label">Diastolic BP (mmHg)</Label>
+                  <Label>Diastolic BP (mmHg)</Label>
                   <Input
                     type="number"
                     value={vitals.bloodPressure.diastolic || ''}
@@ -318,45 +317,45 @@ export default function PatientIntakePage() {
                       bloodPressure: { ...prev.bloodPressure, diastolic: +e.target.value }
                     }))}
                     placeholder="80"
-                    className="input-vitals"
+                    className="font-vitals"
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label className="section-label">Respiratory Rate (/min)</Label>
+                  <Label>Respiratory Rate (/min)</Label>
                   <Input
                     type="number"
                     value={vitals.respiratoryRate || ''}
                     onChange={(e) => setVitals(prev => ({ ...prev, respiratoryRate: +e.target.value }))}
                     placeholder="16"
-                    className="input-vitals"
+                    className="font-vitals"
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label className="section-label">SpO2 (%)</Label>
+                  <Label>SpO2 (%)</Label>
                   <Input
                     type="number"
                     value={vitals.oxygenSaturation || ''}
                     onChange={(e) => setVitals(prev => ({ ...prev, oxygenSaturation: +e.target.value }))}
                     placeholder="98"
-                    className="input-vitals"
+                    className="font-vitals"
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label className="section-label">Temperature (°F)</Label>
+                  <Label>Temperature (°F)</Label>
                   <Input
                     type="number"
                     step="0.1"
                     value={vitals.temperature || ''}
                     onChange={(e) => setVitals(prev => ({ ...prev, temperature: +e.target.value }))}
                     placeholder="98.6"
-                    className="input-vitals"
+                    className="font-vitals"
                   />
                 </div>
               </div>
 
               {/* Pain Level Slider */}
               <div className="space-y-3">
-                <Label className="section-label">Pain Level (0-10)</Label>
+                <Label>Pain Level (0-10)</Label>
                 <div className="flex items-center gap-4">
                   <input
                     type="range"
@@ -364,13 +363,9 @@ export default function PatientIntakePage() {
                     max="10"
                     value={vitals.painLevel}
                     onChange={(e) => setVitals(prev => ({ ...prev, painLevel: +e.target.value }))}
-                    className="flex-1 h-2 rounded-full appearance-none bg-muted cursor-pointer accent-primary"
+                    className="flex-1 h-2 rounded-full appearance-none bg-gradient-to-r from-confidence-high via-confidence-medium to-esi-1 cursor-pointer"
                   />
-                  <span className={cn(
-                    'font-vitals text-2xl font-bold w-10 text-center',
-                    vitals.painLevel >= 7 && 'text-[hsl(var(--esi-1))]',
-                    vitals.painLevel >= 4 && vitals.painLevel < 7 && 'text-[hsl(var(--esi-2))]'
-                  )}>
+                  <span className="font-vitals text-2xl font-bold w-8 text-center">
                     {vitals.painLevel}
                   </span>
                 </div>
@@ -382,14 +377,14 @@ export default function PatientIntakePage() {
 
               {/* Preview */}
               {vitals.heartRate > 0 && (
-                <div className="p-4 bg-muted/30 rounded-lg border border-border/50">
-                  <Label className="section-label mb-3 block">Vitals Preview</Label>
+                <div className="p-4 bg-muted/30 rounded-lg">
+                  <Label className="text-sm mb-3 block">Vitals Preview</Label>
                   <VitalsDisplay vitals={vitals} />
                 </div>
               )}
 
               {/* Navigation */}
-              <div className="flex justify-between pt-2">
+              <div className="flex justify-between">
                 <Button variant="outline" onClick={() => setStep('demographics')}>
                   Back
                 </Button>
@@ -404,14 +399,13 @@ export default function PatientIntakePage() {
           {step === 'complaint' && (
             <div className="space-y-6">
               <div className="space-y-2">
-                <Label htmlFor="chiefComplaint" className="text-sm">Chief Complaint <span className="text-[hsl(var(--esi-1))]">*</span></Label>
+                <Label htmlFor="chiefComplaint">Chief Complaint *</Label>
                 <Textarea
                   id="chiefComplaint"
                   value={formData.chiefComplaint}
                   onChange={(e) => setFormData(prev => ({ ...prev, chiefComplaint: e.target.value }))}
                   placeholder="Describe the patient's primary reason for visit, symptoms, and relevant history..."
                   rows={4}
-                  className="input-clinical resize-none"
                 />
                 <p className="text-xs text-muted-foreground">
                   Include onset, duration, severity, and any associated symptoms
@@ -419,31 +413,29 @@ export default function PatientIntakePage() {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="medications" className="text-sm">Current Medications</Label>
+                <Label htmlFor="medications">Current Medications</Label>
                 <Textarea
                   id="medications"
                   value={formData.medications}
                   onChange={(e) => setFormData(prev => ({ ...prev, medications: e.target.value }))}
                   placeholder="List current medications, dosages, and frequency..."
                   rows={2}
-                  className="input-clinical resize-none"
                 />
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="medicalHistory" className="text-sm">Relevant Medical History</Label>
+                <Label htmlFor="medicalHistory">Relevant Medical History</Label>
                 <Textarea
                   id="medicalHistory"
                   value={formData.medicalHistory}
                   onChange={(e) => setFormData(prev => ({ ...prev, medicalHistory: e.target.value }))}
                   placeholder="Previous conditions, surgeries, chronic illnesses..."
                   rows={2}
-                  className="input-clinical resize-none"
                 />
               </div>
 
               {/* Navigation */}
-              <div className="flex justify-between pt-2">
+              <div className="flex justify-between">
                 <Button variant="outline" onClick={() => setStep('vitals')}>
                   Back
                 </Button>
@@ -457,9 +449,9 @@ export default function PatientIntakePage() {
           {/* Documents Step */}
           {step === 'documents' && (
             <div className="space-y-6">
-              <div className="border border-dashed border-border/70 rounded-lg p-8 text-center bg-muted/20">
-                <FileUp className="h-10 w-10 text-muted-foreground mx-auto mb-3" />
-                <h3 className="font-medium mb-1">Upload Medical Documents</h3>
+              <div className="border-2 border-dashed border-muted rounded-lg p-8 text-center">
+                <FileUp className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+                <h3 className="font-medium mb-2">Upload Medical Documents</h3>
                 <p className="text-sm text-muted-foreground mb-4">
                   Lab reports, discharge summaries, referrals, imaging results
                 </p>
@@ -480,27 +472,25 @@ export default function PatientIntakePage() {
               {/* Uploaded Files */}
               {uploadedFiles.length > 0 && (
                 <div className="space-y-2">
-                  <Label className="section-label">Uploaded Files</Label>
+                  <Label>Uploaded Documents</Label>
                   <div className="space-y-2">
                     {uploadedFiles.map((file) => (
                       <div 
                         key={file.id} 
-                        className="flex items-center justify-between p-3 bg-muted/30 rounded-lg border border-border/50"
+                        className="flex items-center justify-between p-3 bg-muted/50 rounded-lg"
                       >
                         <div className="flex items-center gap-3">
                           <File className="h-4 w-4 text-muted-foreground" />
-                          <div>
-                            <p className="text-sm font-medium">{file.name}</p>
-                            <p className="text-xs text-muted-foreground">
-                              {(file.size / 1024).toFixed(1)} KB
-                            </p>
-                          </div>
+                          <span className="text-sm font-medium">{file.name}</span>
+                          <span className="text-xs text-muted-foreground">
+                            {(file.size / 1024).toFixed(1)} KB
+                          </span>
                         </div>
                         <Button 
                           variant="ghost" 
                           size="icon" 
+                          className="h-8 w-8"
                           onClick={() => removeFile(file.id)}
-                          className="h-7 w-7 text-muted-foreground hover:text-foreground"
                         >
                           <X className="h-4 w-4" />
                         </Button>
@@ -510,14 +500,18 @@ export default function PatientIntakePage() {
                 </div>
               )}
 
+              <p className="text-xs text-muted-foreground">
+                Documents will be analyzed by AI to extract relevant clinical information for triage assessment.
+              </p>
+
               {/* Navigation */}
-              <div className="flex justify-between pt-2">
+              <div className="flex justify-between">
                 <Button variant="outline" onClick={() => setStep('complaint')}>
                   Back
                 </Button>
-                <Button onClick={handleStartTriage} className="gap-2">
+                <Button onClick={handleStartTriage} size="lg" className="gap-2">
+                  Start AI Triage
                   <CheckCircle2 className="h-4 w-4" />
-                  Complete & Start Triage
                 </Button>
               </div>
             </div>
