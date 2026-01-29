@@ -12,7 +12,6 @@ import PhysicianLayout from "./components/layout/PhysicianLayout";
 
 // Pages
 import LandingPage from "./pages/LandingPage";
-import RolePortal from "./pages/RolePortal";
 import AuthPage from "./pages/AuthPage";
 import NurseDashboard from "./pages/NurseDashboard";
 import PatientIntakePage from "./pages/PatientIntakePage";
@@ -36,7 +35,6 @@ const App = () => (
             <Routes>
               {/* Landing Page */}
               <Route path="/" element={<LandingPage />} />
-              <Route path="/portal" element={<RolePortal />} />
               <Route path="/auth" element={<AuthPage />} />
 
               {/* Nurse Station Routes */}
