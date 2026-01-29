@@ -134,8 +134,8 @@ export default function AuditLogs() {
       return;
     }
 
-    // Generate CSV
-    const headers = ['Timestamp', 'Event', 'Patient', 'MRN', 'ESI', 'Details'];
+    // Generate CSV with real data from database
+    const headers = ['Timestamp', 'Event', 'Patient', 'MRN', 'ESI', 'User ID', 'Details'];
     const csvContent = [
       headers.join(','),
       ...filteredLogs.map(log => [
@@ -144,22 +144,24 @@ export default function AuditLogs() {
         log.patient_name || 'N/A',
         log.patient_mrn || 'N/A',
         log.esi_level || 'N/A',
-        typeof log.details === 'object' ? JSON.stringify(log.details).replace(/,/g, ';') : 'N/A'
+        log.user_id || 'System',
+        typeof log.details === 'object' ? JSON.stringify(log.details).replace(/,/g, ';').replace(/"/g, "'") : 'N/A'
       ].map(v => `"${v}"`).join(','))
     ].join('\n');
 
-    // Download
+    // Create and download the file
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const link = document.createElement('a');
     const url = URL.createObjectURL(blob);
     link.setAttribute('href', url);
-    link.setAttribute('download', `audit-logs-${format(new Date(), 'yyyy-MM-dd')}.csv`);
+    link.setAttribute('download', `audit-logs-${format(new Date(), 'yyyy-MM-dd-HHmmss')}.csv`);
     link.style.visibility = 'hidden';
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+    URL.revokeObjectURL(url); // Clean up
     
-    toast.success('Audit logs exported successfully');
+    toast.success(`Exported ${filteredLogs.length} audit log entries`);
   };
 
   const getDetailsText = (details: unknown): string => {

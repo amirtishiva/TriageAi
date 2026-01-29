@@ -109,6 +109,8 @@ export default {
           warning: "hsl(var(--vitals-warning))",
           critical: "hsl(var(--vitals-critical))",
         },
+        // Warning color for returning patients, etc.
+        warning: "hsl(var(--vitals-warning))",
         // Emergency state
         emergency: {
           bg: "hsl(var(--emergency-bg))",
