@@ -1,4 +1,5 @@
 import { Button } from '@/components/ui/button';
+import { motion } from 'framer-motion';
 
 export function HeroSection() {
   const scrollToSection = (id: string) => {
@@ -11,7 +12,12 @@ export function HeroSection() {
       <div className="container mx-auto px-6 py-24 md:py-32">
         <div className="flex flex-col items-center text-center max-w-3xl mx-auto space-y-8">
           {/* Status Badge */}
-          <div className="inline-flex items-center gap-2 rounded-full border border-primary/20 bg-primary/10 px-4 py-1.5">
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5 }}
+            className="inline-flex items-center gap-2 rounded-full border border-primary/20 bg-primary/10 px-4 py-1.5"
+          >
             <span className="relative flex h-2 w-2">
               <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-primary opacity-75" />
               <span className="relative inline-flex h-2 w-2 rounded-full bg-primary" />
@@ -19,23 +25,38 @@ export function HeroSection() {
             <span className="text-xs font-medium uppercase tracking-wider text-primary">
               Live Clinical Processing
             </span>
-          </div>
+          </motion.div>
 
           {/* Headline */}
-          <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold tracking-tight text-foreground">
+          <motion.h1
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5, delay: 0.1 }}
+            className="text-4xl md:text-5xl lg:text-6xl font-bold tracking-tight text-foreground"
+          >
             Clinical Reliability
             <br />
             <span className="font-serif italic text-primary">by Design</span>
-          </h1>
+          </motion.h1>
 
           {/* Subheadline */}
-          <p className="text-lg text-muted-foreground max-w-xl">
+          <motion.p
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5, delay: 0.2 }}
+            className="text-lg text-muted-foreground max-w-xl"
+          >
             A high-performance AI triage platform for modern health systems.
             Precise routing, explainable logic, and provider-first control.
-          </p>
+          </motion.p>
 
           {/* CTAs */}
-          <div className="flex flex-col sm:flex-row gap-4">
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5, delay: 0.3 }}
+            className="flex flex-col sm:flex-row gap-4"
+          >
             <Button
               size="lg"
               onClick={() => scrollToSection('#safety')}
@@ -51,7 +72,7 @@ export function HeroSection() {
             >
               Schedule Demo
             </Button>
-          </div>
+          </motion.div>
         </div>
       </div>
     </section>
