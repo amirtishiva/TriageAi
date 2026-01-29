@@ -18,6 +18,7 @@ import { NavLink } from '@/components/NavLink';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
+import { ThemeToggle } from '@/components/ThemeToggle';
 import { 
   Stethoscope, 
   ClipboardList, 
@@ -247,6 +248,9 @@ function AppHeader() {
             </span>
           )}
         </button>
+
+        {/* Theme Toggle */}
+        <ThemeToggle />
 
         {/* Settings */}
         <button className="h-8 w-8 rounded-lg bg-muted/50 flex items-center justify-center hover:bg-muted transition-colors">
