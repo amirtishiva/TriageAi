@@ -1,10 +1,11 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
+import { Input } from '@/components/ui/input';
 import {
   Select,
   SelectContent,
@@ -20,15 +21,13 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { ESIBadge, ESILevelSelector } from '@/components/triage/ESIBadge';
+import { ESIBadge, ESILevelSelector, ESICircle } from '@/components/triage/ESIBadge';
 import { VitalsDisplay } from '@/components/triage/VitalsDisplay';
 import { SBARDisplay } from '@/components/triage/SBARDisplay';
 import { ConfidenceIndicator } from '@/components/triage/ConfidenceIndicator';
 import { mockPatients, generateAITriageResult } from '@/data/mockData';
 import { 
   ESILevel, 
-  Patient, 
-  AITriageResult, 
   OverrideRationale, 
   OVERRIDE_RATIONALE_LABELS,
   ESI_LABELS
@@ -37,13 +36,17 @@ import {
   ArrowLeft, 
   Bot, 
   CheckCircle2, 
-  Edit3, 
   AlertTriangle,
   Loader2,
   Sparkles,
   Clock,
-  User,
-  History
+  FileText,
+  Wifi,
+  Save,
+  RotateCcw,
+  Edit3,
+  MapPin,
+  Printer
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -51,13 +54,12 @@ export default function TriageScreen() {
   const navigate = useNavigate();
   const { patientId } = useParams();
   
-  // Find patient - use first in-triage patient as fallback
   const patient = patientId === 'new-patient' 
-    ? mockPatients[5] // Use Lisa Anderson (stroke patient) for new intake
+    ? mockPatients[5]
     : mockPatients.find(p => p.id === patientId) || mockPatients[0];
   
   const [isAnalyzing, setIsAnalyzing] = useState(true);
-  const [aiResult, setAIResult] = useState<AITriageResult | null>(null);
+  const [aiResult, setAIResult] = useState<ReturnType<typeof generateAITriageResult> | null>(null);
   const [selectedESI, setSelectedESI] = useState<ESILevel | null>(null);
   const [isOverriding, setIsOverriding] = useState(false);
   const [overrideRationale, setOverrideRationale] = useState<OverrideRationale | ''>('');
@@ -65,15 +67,13 @@ export default function TriageScreen() {
   const [showConfirmDialog, setShowConfirmDialog] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Simulate AI analysis
   useEffect(() => {
     const timer = setTimeout(() => {
       const result = generateAITriageResult(patient);
       setAIResult(result);
       setSelectedESI(result.draftESI);
       setIsAnalyzing(false);
-    }, 2500);
-
+    }, 2000);
     return () => clearTimeout(timer);
   }, [patient]);
 
@@ -89,16 +89,12 @@ export default function TriageScreen() {
   };
 
   const handleConfirm = () => {
-    if (isOverriding && !overrideRationale) {
-      return; // Require rationale for override
-    }
+    if (isOverriding && !overrideRationale) return;
     setShowConfirmDialog(true);
   };
 
   const handleSubmit = () => {
     setIsSubmitting(true);
-    
-    // Simulate submission
     setTimeout(() => {
       setIsSubmitting(false);
       setShowConfirmDialog(false);
@@ -115,268 +111,366 @@ export default function TriageScreen() {
   }
 
   return (
-    <div className="max-w-6xl mx-auto space-y-6 animate-fade-in-up">
-      {/* Header */}
-      <div className="flex items-center justify-between">
+    <div className="h-full">
+      {/* Page Header - Based on reference image 2 */}
+      <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-4">
-          <Button variant="ghost" size="icon" onClick={() => navigate(-1)}>
-            <ArrowLeft className="h-5 w-5" />
+          <Button variant="ghost" size="icon" onClick={() => navigate(-1)} className="h-8 w-8">
+            <ArrowLeft className="h-4 w-4" />
           </Button>
           <div>
-            <h1 className="text-2xl font-bold flex items-center gap-3">
-              AI Triage Assessment
-              {aiResult && selectedESI && (
-                <ESIBadge level={selectedESI} size="lg" />
-              )}
-            </h1>
-            <p className="text-muted-foreground">
-              Human-in-the-loop validation required before routing
-            </p>
+            <div className="flex items-center gap-2">
+              <h1 className="text-xl font-bold">CLINICAL DECISION SUPPORT TRIAGE</h1>
+              <Badge className="bg-primary/20 text-primary border-primary/30 text-[10px]">
+                STEP 2: VALIDATION
+              </Badge>
+            </div>
+            <p className="text-xs text-muted-foreground">Reviewing AI-Suggested Acuity & Routing</p>
           </div>
+        </div>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" size="sm" className="gap-1.5 h-8">
+            <Save className="h-3.5 w-3.5" />
+            Save Draft
+          </Button>
+          <Button size="sm" className="gap-1.5 h-8 bg-confidence-high hover:bg-confidence-high/90">
+            Finalize & Route
+          </Button>
         </div>
       </div>
 
-      {/* Patient Header */}
-      <Card className="clinical-card">
-        <CardContent className="p-4">
-          <div className="flex items-start justify-between">
-            <div className="flex items-start gap-4">
-              <div className="h-14 w-14 rounded-full bg-primary/10 flex items-center justify-center">
-                <User className="h-7 w-7 text-primary" />
-              </div>
-              <div>
-                <div className="flex items-center gap-2">
-                  <h2 className="text-xl font-semibold">
-                    {patient.lastName}, {patient.firstName}
-                  </h2>
-                  {patient.isReturning && (
-                    <Badge variant="outline">
-                      <History className="h-3 w-3 mr-1" />
-                      Returning
-                    </Badge>
-                  )}
-                </div>
-                <div className="flex items-center gap-4 mt-1 text-sm text-muted-foreground">
-                  <span>{patient.age}yo {patient.gender}</span>
-                  <span className="font-mono">{patient.mrn}</span>
-                  <span className="flex items-center gap-1">
-                    <Clock className="h-3 w-3" />
-                    Arrived {Math.round((Date.now() - patient.arrivalTime.getTime()) / 60000)} min ago
+      {/* 3-Column Layout - Based on reference images 1 & 2 */}
+      <div className="grid grid-cols-12 gap-4 h-[calc(100vh-180px)]">
+        
+        {/* Left Column - Patient Vitals (3 cols) */}
+        <div className="col-span-3 space-y-4 overflow-y-auto">
+          {/* Patient Header Card */}
+          <Card className="clinical-card">
+            <CardContent className="p-4">
+              <div className="flex items-center gap-3 mb-3">
+                <div className="h-12 w-12 rounded-full bg-primary/20 flex items-center justify-center">
+                  <span className="text-lg font-bold text-primary">
+                    {patient.firstName[0]}{patient.lastName[0]}
                   </span>
                 </div>
+                <div>
+                  <h3 className="font-bold text-lg">
+                    {patient.firstName} {patient.lastName}, {patient.age}{patient.gender.charAt(0).toUpperCase()}
+                  </h3>
+                  <p className="text-xs text-muted-foreground font-mono">{patient.mrn}</p>
+                  <p className="text-xs text-muted-foreground">DOB: {new Date(patient.dateOfBirth).toLocaleDateString()}</p>
+                </div>
               </div>
-            </div>
-            {patient.allergies && patient.allergies.length > 0 && (
-              <Badge variant="destructive" className="gap-1">
-                <AlertTriangle className="h-3 w-3" />
-                Allergies: {patient.allergies.join(', ')}
-              </Badge>
-            )}
-          </div>
+              
+              {/* FHIR Connection Status */}
+              <div className="flex items-center gap-2 text-xs text-confidence-high">
+                <Wifi className="h-3 w-3" />
+                <span>Live FHIR Connection: Active</span>
+              </div>
+            </CardContent>
+          </Card>
 
-          {/* Chief Complaint */}
-          <div className="mt-4 p-3 bg-muted/50 rounded-lg">
-            <p className="text-sm">
-              <span className="font-semibold">Chief Complaint: </span>
-              {patient.chiefComplaint}
+          {/* Current Vitals - Based on reference image 1 */}
+          <div>
+            <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-2">
+              CURRENT VITALS (LAST PULL: 2M AGO)
             </p>
-          </div>
-
-          {/* Vitals */}
-          <div className="mt-4">
-            <Label className="text-sm mb-2 block">Current Vital Signs</Label>
-            <VitalsDisplay vitals={patient.vitals} />
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* AI Analysis Section */}
-      {isAnalyzing ? (
-        <Card className="clinical-card">
-          <CardContent className="p-12">
-            <div className="flex flex-col items-center justify-center text-center">
-              <div className="relative">
-                <Bot className="h-16 w-16 text-primary animate-pulse" />
-                <Sparkles className="h-6 w-6 text-primary absolute -top-1 -right-1 animate-bounce" />
-              </div>
-              <h3 className="text-xl font-semibold mt-6 mb-2">AI Analysis in Progress</h3>
-              <p className="text-muted-foreground max-w-md">
-                Extracting clinical information, analyzing vitals, and generating 
-                SBAR summary with ESI recommendation...
-              </p>
-              <div className="flex items-center gap-2 mt-6 text-sm text-muted-foreground">
-                <Loader2 className="h-4 w-4 animate-spin" />
-                Processing patient data...
-              </div>
+            <div className="space-y-2">
+              <VitalsDisplay vitals={patient.vitals} layout="grid" showLabels />
             </div>
-          </CardContent>
-        </Card>
-      ) : aiResult && (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* AI Draft ESI */}
-          <Card className={cn(
-            'clinical-card border-2',
-            aiResult.draftESI <= 2 && 'border-esi-2/50',
-          )}>
-            <CardHeader>
-              <div className="flex items-center justify-between">
-                <CardTitle className="flex items-center gap-2">
-                  <Bot className="h-5 w-5 text-primary" />
-                  AI Draft Assessment
-                </CardTitle>
-                <Badge variant="secondary" className="gap-1">
-                  <Sparkles className="h-3 w-3" />
-                  Auto-generated
-                </Badge>
-              </div>
-              <CardDescription>
-                Review and validate the AI-suggested severity level
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              {/* Draft ESI Display */}
-              <div className="flex items-center justify-between p-4 bg-muted/30 rounded-lg">
-                <div>
-                  <p className="text-sm text-muted-foreground mb-1">Suggested ESI Level</p>
-                  <div className="flex items-center gap-3">
-                    <ESIBadge level={aiResult.draftESI} size="lg" />
-                    <div>
-                      <p className="font-semibold">{ESI_LABELS[aiResult.draftESI].label}</p>
-                      <p className="text-xs text-muted-foreground">
-                        {ESI_LABELS[aiResult.draftESI].description}
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Confidence Indicator */}
-              <ConfidenceIndicator 
-                confidence={aiResult.confidence} 
-                factors={aiResult.influencingFactors}
-              />
-
-              {/* Extracted Info */}
-              <div className="space-y-3">
-                <div>
-                  <Label className="text-xs">Extracted Symptoms</Label>
-                  <div className="flex flex-wrap gap-1.5 mt-1">
-                    {aiResult.extractedSymptoms.map((symptom, i) => (
-                      <Badge key={i} variant="outline" className="text-xs">
-                        {symptom}
-                      </Badge>
-                    ))}
-                  </div>
-                </div>
-                <div>
-                  <Label className="text-xs">Timeline</Label>
-                  <p className="text-sm mt-1">{aiResult.extractedTimeline}</p>
-                </div>
-                {aiResult.comorbidities.length > 0 && (
-                  <div>
-                    <Label className="text-xs">Comorbidities</Label>
-                    <div className="flex flex-wrap gap-1.5 mt-1">
-                      {aiResult.comorbidities.map((c, i) => (
-                        <Badge key={i} variant="secondary" className="text-xs">
-                          {c}
-                        </Badge>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* SBAR Summary */}
-          <Card className="clinical-card">
-            <CardHeader>
-              <CardTitle>SBAR Summary</CardTitle>
-              <CardDescription>
-                Structured handoff communication
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <SBARDisplay sbar={aiResult.sbar} />
-            </CardContent>
-          </Card>
+          </div>
         </div>
-      )}
 
-      {/* Validation Section */}
-      {!isAnalyzing && aiResult && selectedESI && (
-        <Card className="clinical-card border-2 border-primary/20">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <CheckCircle2 className="h-5 w-5 text-primary" />
-              Nurse Validation
-            </CardTitle>
-            <CardDescription>
-              Confirm or override the AI assessment. Your clinical judgment is final.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-6">
-            {/* ESI Selector */}
-            <div>
-              <Label className="mb-3 block">Select Final ESI Level</Label>
-              <ESILevelSelector value={selectedESI} onChange={handleESIChange} />
-            </div>
-
-            {/* Override Rationale */}
-            {isOverriding && (
-              <div className="p-4 bg-muted/30 rounded-lg border-l-4 border-primary space-y-4 animate-fade-in-up">
-                <div className="flex items-center gap-2 text-sm font-medium">
-                  <Edit3 className="h-4 w-4" />
-                  You're changing from ESI {aiResult.draftESI} to ESI {selectedESI}
+        {/* Center Column - Clinical Entry (5 cols) */}
+        <div className="col-span-5 space-y-4 overflow-y-auto">
+          {/* Patient Data Intake - Based on reference image 2 */}
+          <Card className="clinical-card">
+            <CardHeader className="pb-3">
+              <CardTitle className="flex items-center gap-2 text-base">
+                <Bot className="h-4 w-4 text-primary" />
+                Patient Data Intake
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {/* Vital Inputs Grid */}
+              <div className="grid grid-cols-3 gap-3">
+                <div>
+                  <Label className="text-[10px] uppercase text-muted-foreground">BP (mmHg)</Label>
+                  <Input 
+                    value={`${patient.vitals.bloodPressure.systolic}/${patient.vitals.bloodPressure.diastolic}`}
+                    className={cn(
+                      'font-vitals text-lg h-10',
+                      patient.vitals.bloodPressure.systolic > 140 && 'text-esi-2 border-esi-2/50'
+                    )}
+                    readOnly
+                  />
                 </div>
-                
-                <div className="space-y-2">
-                  <Label>Reason for Override</Label>
-                  <Select 
-                    value={overrideRationale} 
-                    onValueChange={(v) => setOverrideRationale(v as OverrideRationale)}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select a rationale..." />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {Object.entries(OVERRIDE_RATIONALE_LABELS).map(([key, label]) => (
-                        <SelectItem key={key} value={key}>{label}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                <div>
+                  <Label className="text-[10px] uppercase text-muted-foreground">Heart Rate (BPM)</Label>
+                  <Input 
+                    value={patient.vitals.heartRate}
+                    className={cn(
+                      'font-vitals text-lg h-10',
+                      patient.vitals.heartRate > 100 && 'text-esi-2 border-esi-2/50'
+                    )}
+                    readOnly
+                  />
                 </div>
-
-                <div className="space-y-2">
-                  <Label>Additional Notes (Optional)</Label>
-                  <Textarea
-                    value={overrideNotes}
-                    onChange={(e) => setOverrideNotes(e.target.value)}
-                    placeholder="Add any relevant clinical observations..."
-                    rows={2}
+                <div>
+                  <Label className="text-[10px] uppercase text-muted-foreground">Resp Rate (BR/M)</Label>
+                  <Input 
+                    value={patient.vitals.respiratoryRate}
+                    className="font-vitals text-lg h-10"
+                    readOnly
+                  />
+                </div>
+                <div>
+                  <Label className="text-[10px] uppercase text-muted-foreground">SPO2 (%)</Label>
+                  <Input 
+                    value={patient.vitals.oxygenSaturation}
+                    className={cn(
+                      'font-vitals text-lg h-10',
+                      patient.vitals.oxygenSaturation < 95 && 'text-esi-1 border-esi-1/50'
+                    )}
+                    readOnly
+                  />
+                </div>
+                <div>
+                  <Label className="text-[10px] uppercase text-muted-foreground">Temp (°F)</Label>
+                  <Input 
+                    value={patient.vitals.temperature.toFixed(1)}
+                    className="font-vitals text-lg h-10"
+                    readOnly
+                  />
+                </div>
+                <div>
+                  <Label className="text-[10px] uppercase text-muted-foreground">Pain (1-10)</Label>
+                  <Input 
+                    value={patient.vitals.painLevel}
+                    className={cn(
+                      'font-vitals text-lg h-10',
+                      patient.vitals.painLevel >= 8 && 'text-esi-1 border-esi-1/50'
+                    )}
+                    readOnly
                   />
                 </div>
               </div>
-            )}
+            </CardContent>
+          </Card>
 
-            {/* Action Buttons */}
-            <div className="flex justify-end gap-3">
-              <Button variant="outline" onClick={() => navigate(-1)}>
-                Cancel
-              </Button>
-              <Button 
-                onClick={handleConfirm}
-                disabled={isOverriding && !overrideRationale}
-                size="lg"
-                className="gap-2"
-              >
-                <CheckCircle2 className="h-4 w-4" />
-                {isOverriding ? 'Override & Confirm' : 'Confirm ESI Level'}
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-      )}
+          {/* Clinical Narrative */}
+          <Card className="clinical-card">
+            <CardHeader className="pb-3">
+              <CardTitle className="flex items-center gap-2 text-base">
+                <FileText className="h-4 w-4" />
+                Clinical Narrative
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div>
+                <Label className="text-[10px] uppercase text-muted-foreground">Chief Complaint</Label>
+                <div className="mt-1 p-3 bg-muted/30 rounded-lg border border-border/50">
+                  <p className="text-sm font-medium">{patient.chiefComplaint}</p>
+                </div>
+              </div>
+              
+              <div>
+                <Label className="text-[10px] uppercase text-muted-foreground">History of Present Illness (HPI)</Label>
+                <div className="mt-1 p-3 bg-muted/30 rounded-lg border border-border/50 text-sm">
+                  {aiResult ? (
+                    <p className="leading-relaxed">
+                      {patient.age}yo {patient.gender} presents with {patient.chiefComplaint.toLowerCase()}. 
+                      Patient reports <span className="underline decoration-dotted cursor-help">{aiResult.extractedSymptoms.slice(0, 2).join(' and ').toLowerCase()}</span>. 
+                      {patient.medicalHistory?.length ? ` Known history of ${patient.medicalHistory.join(', ').toLowerCase()}.` : ''} 
+                      Patient is currently <span className="underline decoration-dotted cursor-help">{patient.vitals.heartRate > 100 ? 'tachycardic' : 'hemodynamically stable'}</span> ({patient.vitals.heartRate} bpm).
+                    </p>
+                  ) : (
+                    <div className="flex items-center gap-2 text-muted-foreground">
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Generating clinical narrative...
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* FHIR Enrichment Badge */}
+              <div className="p-3 bg-primary/5 border border-primary/20 rounded-lg">
+                <div className="flex items-center gap-2 text-primary text-sm font-medium">
+                  <Sparkles className="h-4 w-4" />
+                  FHIR Enrichment Active
+                </div>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Automatically cross-referencing previous visits. AI detected correlation in diagnosis codes.
+                </p>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Right Column - Smart Insights (4 cols) */}
+        <div className="col-span-4 space-y-4 overflow-y-auto">
+          {/* AI Recommendation Panel - Based on reference images 1 & 2 */}
+          <Card className={cn(
+            'clinical-card border-2',
+            aiResult && aiResult.draftESI <= 2 && 'border-esi-2/50'
+          )}>
+            <CardHeader className="pb-3">
+              <div className="flex items-center justify-between">
+                <CardTitle className="flex items-center gap-2 text-base">
+                  <Sparkles className="h-4 w-4 text-primary" />
+                  Smart Insights
+                </CardTitle>
+                {aiResult && (
+                  <Badge className="bg-primary/20 text-primary border-primary/30 text-[10px]">
+                    CONFIDENCE: {aiResult.confidence}%
+                  </Badge>
+                )}
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {isAnalyzing ? (
+                <div className="flex flex-col items-center justify-center py-8">
+                  <Bot className="h-12 w-12 text-primary animate-pulse" />
+                  <p className="text-sm mt-4">AI Analysis in Progress...</p>
+                  <Loader2 className="h-4 w-4 animate-spin mt-2" />
+                </div>
+              ) : aiResult && (
+                <>
+                  {/* AI Recommendation Box */}
+                  <div className={cn(
+                    'p-4 rounded-lg',
+                    aiResult.draftESI === 1 && 'bg-esi-1-bg border border-esi-1/30',
+                    aiResult.draftESI === 2 && 'bg-esi-2-bg border border-esi-2/30',
+                    aiResult.draftESI === 3 && 'bg-esi-3-bg border border-esi-3/30',
+                    aiResult.draftESI >= 4 && 'bg-muted/30 border border-border',
+                  )}>
+                    <p className="text-[10px] uppercase tracking-wider text-muted-foreground mb-2">
+                      AI RECOMMENDATION
+                    </p>
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <h2 className={cn(
+                          'text-4xl font-bold font-vitals',
+                          aiResult.draftESI === 1 && 'text-esi-1',
+                          aiResult.draftESI === 2 && 'text-esi-2',
+                          aiResult.draftESI === 3 && 'text-esi-3',
+                        )}>
+                          ESI LEVEL {aiResult.draftESI}
+                        </h2>
+                        <p className="text-xs mt-1">
+                          {ESI_LABELS[aiResult.draftESI].label}: {ESI_LABELS[aiResult.draftESI].description}
+                        </p>
+                      </div>
+                      {aiResult.draftESI <= 2 && (
+                        <AlertTriangle className="h-8 w-8 text-esi-2" />
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Confirm/Override Buttons */}
+                  <div className="grid grid-cols-2 gap-2">
+                    <Button 
+                      className="h-10 gap-2 bg-primary hover:bg-primary/90"
+                      onClick={() => !isOverriding && handleConfirm()}
+                    >
+                      <CheckCircle2 className="h-4 w-4" />
+                      Confirm
+                    </Button>
+                    <Button 
+                      variant="outline" 
+                      className="h-10 gap-2"
+                      onClick={() => setIsOverriding(!isOverriding)}
+                    >
+                      <Edit3 className="h-4 w-4" />
+                      Override
+                    </Button>
+                  </div>
+
+                  {/* Override Section */}
+                  {isOverriding && (
+                    <div className="space-y-3 p-3 bg-muted/30 rounded-lg border border-border">
+                      <div className="flex items-center justify-between">
+                        <Label className="text-xs uppercase">Override Rationale</Label>
+                        <Badge variant="outline" className="text-[9px] text-esi-1 border-esi-1/30">
+                          REQUIRED
+                        </Badge>
+                      </div>
+                      <Select value={overrideRationale} onValueChange={(v) => setOverrideRationale(v as OverrideRationale)}>
+                        <SelectTrigger className="h-9">
+                          <SelectValue placeholder="Select reason for override..." />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {Object.entries(OVERRIDE_RATIONALE_LABELS).map(([key, label]) => (
+                            <SelectItem key={key} value={key}>{label}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <Textarea 
+                        placeholder="Optional clinical note for override..."
+                        value={overrideNotes}
+                        onChange={(e) => setOverrideNotes(e.target.value)}
+                        rows={2}
+                        className="text-sm"
+                      />
+                      <ESILevelSelector value={selectedESI!} onChange={handleESIChange} />
+                    </div>
+                  )}
+
+                  {/* SBAR Summary - Compact Grid */}
+                  <div>
+                    <p className="text-[10px] uppercase tracking-wider text-muted-foreground mb-2">
+                      REASONING SUMMARY (SBAR)
+                    </p>
+                    <SBARDisplay sbar={aiResult.sbar} layout="compact" />
+                  </div>
+
+                  {/* Rationale Logic */}
+                  <div className="space-y-2">
+                    <p className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                      RATIONALE LOGIC
+                    </p>
+                    {aiResult.influencingFactors.slice(0, 3).map((factor, i) => (
+                      <div 
+                        key={i}
+                        className={cn(
+                          'flex items-center justify-between p-2 rounded-lg text-xs',
+                          factor.impact === 'increases' && 'bg-esi-2-bg/50',
+                          factor.impact === 'neutral' && 'bg-muted/30',
+                        )}
+                      >
+                        <div className="flex items-center gap-2">
+                          {factor.impact === 'increases' && <span className="text-esi-1">!</span>}
+                          <span>{factor.factor}</span>
+                        </div>
+                        <Badge variant="outline" className="text-[9px]">
+                          {factor.category === 'vital' ? 'High Weight' : factor.category}
+                        </Badge>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Suggested Destination */}
+                  <div className="p-3 bg-muted/30 rounded-lg border border-border">
+                    <p className="text-[10px] uppercase tracking-wider text-muted-foreground mb-2">
+                      SUGGESTED DESTINATION
+                    </p>
+                    <div className="flex items-center justify-between">
+                      <span className="font-medium">Main ED - Zone B</span>
+                      <Badge className="bg-esi-2 text-foreground text-[9px]">Wait: 22m</Badge>
+                    </div>
+                  </div>
+
+                  {/* Print Button */}
+                  <Button variant="outline" className="w-full gap-2">
+                    <Printer className="h-4 w-4" />
+                    Print Triage Summary
+                  </Button>
+                </>
+              )}
+            </CardContent>
+          </Card>
+        </div>
+      </div>
 
       {/* Confirmation Dialog */}
       <Dialog open={showConfirmDialog} onOpenChange={setShowConfirmDialog}>
@@ -387,41 +481,23 @@ export default function TriageScreen() {
               This will finalize the ESI level and begin patient routing.
             </DialogDescription>
           </DialogHeader>
-
           <div className="space-y-4 py-4">
             <div className="flex items-center justify-between p-4 bg-muted rounded-lg">
               <span className="font-medium">Final ESI Level</span>
-              {selectedESI && <ESIBadge level={selectedESI} size="md" showLabel />}
+              {selectedESI && <ESIBadge level={selectedESI} size="lg" showLabel />}
             </div>
-
-            {isOverriding && (
+            {isOverriding && overrideRationale && (
               <div className="text-sm text-muted-foreground">
-                <p><strong>Override Reason:</strong> {overrideRationale && OVERRIDE_RATIONALE_LABELS[overrideRationale]}</p>
+                <p><strong>Override Reason:</strong> {OVERRIDE_RATIONALE_LABELS[overrideRationale]}</p>
                 {overrideNotes && <p className="mt-1"><strong>Notes:</strong> {overrideNotes}</p>}
               </div>
             )}
-
-            {selectedESI && selectedESI <= 2 && (
-              <div className="flex items-center gap-2 p-3 bg-esi-2-bg rounded-lg text-sm">
-                <AlertTriangle className="h-4 w-4 text-esi-2" />
-                <span>High-acuity case will be immediately routed to physician</span>
-              </div>
-            )}
           </div>
-
           <DialogFooter>
-            <Button variant="outline" onClick={() => setShowConfirmDialog(false)}>
-              Cancel
-            </Button>
+            <Button variant="outline" onClick={() => setShowConfirmDialog(false)}>Cancel</Button>
             <Button onClick={handleSubmit} disabled={isSubmitting}>
-              {isSubmitting ? (
-                <>
-                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                  Submitting...
-                </>
-              ) : (
-                'Confirm & Route'
-              )}
+              {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+              {isSubmitting ? 'Submitting...' : 'Confirm & Route'}
             </Button>
           </DialogFooter>
         </DialogContent>
