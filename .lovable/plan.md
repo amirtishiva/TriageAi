@@ -309,13 +309,14 @@ Connect real-time subscriptions to UI:
 - [x] TypeScript types from schema
 - [x] React Query hooks for all APIs
 - [x] Real-time subscription hooks
-- [ ] Replace mock data with API calls
+- [x] Replace mock data with API calls
 - [x] Auth context (simulated roles for MVP)
+- [x] Cron job for automatic escalations (pg_cron every minute)
 
 ### Testing
 - [ ] Edge function unit tests
-- [ ] Real-time subscription verification
-- [ ] End-to-end triage flow test
+- [x] Real-time subscription verification
+- [x] End-to-end triage flow test (auth, nurse dashboard, patient intake)
 
 ---
 
