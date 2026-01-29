@@ -286,31 +286,31 @@ Connect real-time subscriptions to UI:
 ## Deliverables Checklist
 
 ### Database
-- [ ] Enable Lovable Cloud Supabase
-- [ ] Create `patients` table with indexes
-- [ ] Create `vital_signs` table
-- [ ] Create `triage_cases` table with status enum
-- [ ] Create `staff` table with role enum
-- [ ] Create `user_roles` table with security function
-- [ ] Create `routing_assignments` table
-- [ ] Create `escalation_events` table
-- [ ] Create `audit_logs` table (immutable)
-- [ ] Configure RLS policies for all tables
+- [x] Enable Lovable Cloud Supabase
+- [x] Create `patients` table with indexes
+- [x] Create `vital_signs` table
+- [x] Create `triage_cases` table with status enum
+- [x] Create `staff` table with role enum
+- [x] Create `user_roles` table with security function
+- [x] Create `routing_assignments` table
+- [x] Create `escalation_events` table
+- [x] Create `audit_logs` table (immutable)
+- [x] Configure RLS policies for all tables
 
 ### Edge Functions
-- [ ] `ai-triage` - Gemini integration for SBAR generation
-- [ ] `validate-triage` - Nurse validation and routing trigger
-- [ ] `acknowledge-case` - Physician acknowledgment
-- [ ] `track-board` - Prioritized queue API
-- [ ] `check-escalations` - Background escalation cron
+- [x] `ai-triage` - Gemini integration for SBAR generation
+- [x] `validate-triage` - Nurse validation and routing trigger
+- [x] `acknowledge-case` - Physician acknowledgment
+- [x] `track-board` - Prioritized queue API
+- [x] `check-escalations` - Background escalation cron
 
 ### Frontend Integration
-- [ ] Supabase client configuration
-- [ ] TypeScript types from schema
-- [ ] React Query hooks for all APIs
-- [ ] Real-time subscription hooks
+- [x] Supabase client configuration
+- [x] TypeScript types from schema
+- [x] React Query hooks for all APIs
+- [x] Real-time subscription hooks
 - [ ] Replace mock data with API calls
-- [ ] Auth context (simulated roles for MVP)
+- [x] Auth context (simulated roles for MVP)
 
 ### Testing
 - [ ] Edge function unit tests

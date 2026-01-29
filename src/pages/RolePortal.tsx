@@ -3,14 +3,15 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button';
 import { 
   Stethoscope, 
-  UserRound, 
   Activity,
-  ClipboardList,
-  Users,
   Heart,
-  ArrowRight
+  ArrowRight,
+  LogIn,
+  User
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useAuth } from '@/contexts/AuthContext';
+import { useRealtimeAlerts } from '@/integrations/supabase/hooks';
 
 interface RoleCardProps {
   title: string;
@@ -85,19 +86,46 @@ function RoleCard({ title, description, icon, features, accentColor, onClick }: 
 
 export default function RolePortal() {
   const navigate = useNavigate();
+  const { user, currentRole, signOut, loading } = useAuth();
+
+  // Enable real-time alerts for authenticated users
+  useRealtimeAlerts(user?.id);
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
       {/* Header */}
       <header className="border-b border-border bg-card/50 backdrop-blur-sm">
         <div className="container mx-auto px-6 py-4">
-          <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-              <Activity className="h-6 w-6" />
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary text-primary-foreground">
+                <Activity className="h-6 w-6" />
+              </div>
+              <div>
+                <h1 className="text-lg font-semibold text-foreground">MedTriage AI</h1>
+                <p className="text-xs text-muted-foreground">Clinical Decision Support System</p>
+              </div>
             </div>
-            <div>
-              <h1 className="text-lg font-semibold text-foreground">MedTriage AI</h1>
-              <p className="text-xs text-muted-foreground">Clinical Decision Support System</p>
+
+            <div className="flex items-center gap-3">
+              {user ? (
+                <>
+                  <div className="text-sm text-right">
+                    <p className="font-medium">{user.email}</p>
+                    <p className="text-xs text-muted-foreground capitalize">
+                      {currentRole?.replace('_', ' ') || 'No role assigned'}
+                    </p>
+                  </div>
+                  <Button variant="outline" size="sm" onClick={() => signOut()}>
+                    Sign Out
+                  </Button>
+                </>
+              ) : (
+                <Button variant="outline" size="sm" onClick={() => navigate('/auth')}>
+                  <LogIn className="h-4 w-4 mr-2" />
+                  Sign In
+                </Button>
+              )}
             </div>
           </div>
         </div>
