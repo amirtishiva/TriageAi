@@ -1,5 +1,4 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -21,12 +20,14 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { Skeleton } from '@/components/ui/skeleton';
 import { ESIBadge } from '@/components/triage/ESIBadge';
 import { VitalsDisplay } from '@/components/triage/VitalsDisplay';
 import { SBARDisplay } from '@/components/triage/SBARDisplay';
 import { useEmergency } from '@/contexts/EmergencyContext';
-import { mockTriageCases } from '@/data/mockData';
-import { TriageCase, ESILevel, ESI_RESPONSE_TIMES } from '@/types/triage';
+import { useAuth } from '@/contexts/AuthContext';
+import { useTrackBoard, useAcknowledgeCase, TrackBoardCase } from '@/integrations/supabase/hooks';
+import { ESILevel, ESI_RESPONSE_TIMES, VitalSigns, SBARSummary } from '@/types/triage';
 import { 
   Search, 
   Clock, 
@@ -38,28 +39,30 @@ import {
   ChevronUp,
   ExternalLink,
   Loader2,
-  Play
+  RefreshCw
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { formatDistanceToNow } from 'date-fns';
+import { toast } from 'sonner';
 
 export default function TrackBoard() {
-  const navigate = useNavigate();
+  const { user } = useAuth();
   const { activateEmergencyMode, deactivateEmergencyMode, checkCriticalState } = useEmergency();
+  const acknowledgeMutation = useAcknowledgeCase();
+  
   const [searchQuery, setSearchQuery] = useState('');
   const [filterESI, setFilterESI] = useState<ESILevel | 'all'>('all');
   const [sortBy, setSortBy] = useState<'esi' | 'time'>('esi');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
-  const [selectedCase, setSelectedCase] = useState<TriageCase | null>(null);
+  const [selectedCase, setSelectedCase] = useState<TrackBoardCase | null>(null);
   const [isAcknowledging, setIsAcknowledging] = useState(false);
 
-  // Filter and sort cases
-  const filteredCases = mockTriageCases
-    .filter(c => c.validation) // Only show validated cases
-    .filter(c => {
-      if (filterESI === 'all') return true;
-      return c.validation?.validatedESI === filterESI;
-    })
+  // Fetch track board data with filters
+  const { data: trackBoardData, isLoading, refetch, isRefetching } = useTrackBoard({
+    esiLevels: filterESI === 'all' ? undefined : [filterESI],
+  });
+
+  // Filter and sort cases client-side for search
+  const filteredCases = (trackBoardData?.cases || [])
     .filter(c => {
       if (!searchQuery) return true;
       const name = `${c.patient.firstName} ${c.patient.lastName}`.toLowerCase();
@@ -68,13 +71,9 @@ export default function TrackBoard() {
     })
     .sort((a, b) => {
       if (sortBy === 'esi') {
-        const esiA = a.validation?.validatedESI || 5;
-        const esiB = b.validation?.validatedESI || 5;
-        return sortOrder === 'asc' ? esiA - esiB : esiB - esiA;
+        return sortOrder === 'asc' ? a.esiLevel - b.esiLevel : b.esiLevel - a.esiLevel;
       } else {
-        const timeA = a.patient.arrivalTime.getTime();
-        const timeB = b.patient.arrivalTime.getTime();
-        return sortOrder === 'asc' ? timeA - timeB : timeB - timeA;
+        return sortOrder === 'asc' ? a.waitTimeMs - b.waitTimeMs : b.waitTimeMs - a.waitTimeMs;
       }
     });
 
@@ -87,11 +86,10 @@ export default function TrackBoard() {
     }
   };
 
-  const handleSelectCase = (triageCase: TriageCase) => {
+  const handleSelectCase = (triageCase: TrackBoardCase) => {
     setSelectedCase(triageCase);
-    const esiLevel = triageCase.validation?.validatedESI;
-    if (esiLevel && checkCriticalState(esiLevel)) {
-      activateEmergencyMode(triageCase.patient.id);
+    if (checkCriticalState(triageCase.esiLevel as ESILevel)) {
+      activateEmergencyMode(triageCase.patientId);
     }
   };
 
@@ -100,18 +98,35 @@ export default function TrackBoard() {
     deactivateEmergencyMode();
   };
 
-  const handleAcknowledge = () => {
+  const handleAcknowledge = async () => {
+    if (!selectedCase) return;
+    
     setIsAcknowledging(true);
-    setTimeout(() => {
-      setIsAcknowledging(false);
+    try {
+      await acknowledgeMutation.mutateAsync({
+        triageCaseId: selectedCase.id,
+      });
+      toast.success('Case acknowledged successfully');
       handleCloseDialog();
-      // In real app, this would update the case status
-    }, 1500);
+      refetch();
+    } catch (error) {
+      console.error('Acknowledge error:', error);
+      toast.error('Failed to acknowledge case');
+    } finally {
+      setIsAcknowledging(false);
+    }
+  };
+
+  // Convert TrackBoardCase to VitalSigns format for display
+  const convertToVitals = (caseData: TrackBoardCase): VitalSigns | null => {
+    // Note: We don't have full vitals in track board response, would need to fetch separately
+    return null;
   };
 
   // Stats
-  const pendingCount = filteredCases.filter(c => !c.acknowledgedAt).length;
-  const criticalCount = filteredCases.filter(c => (c.validation?.validatedESI || 5) <= 2).length;
+  const pendingCount = filteredCases.filter(c => c.status !== 'acknowledged').length;
+  const criticalCount = filteredCases.filter(c => c.esiLevel <= 2).length;
+  const overdueCount = trackBoardData?.summary?.overdue || 0;
 
   const SortIcon = ({ column }: { column: 'esi' | 'time' }) => {
     if (sortBy !== column) return null;
@@ -120,8 +135,7 @@ export default function TrackBoard() {
       <ChevronDown className="h-4 w-4 ml-1" />;
   };
 
-  const selectedEsiLevel = selectedCase?.validation?.validatedESI;
-  const isSelectedCritical = selectedEsiLevel ? checkCriticalState(selectedEsiLevel) : false;
+  const isSelectedCritical = selectedCase ? checkCriticalState(selectedCase.esiLevel as ESILevel) : false;
 
   return (
     <div className="space-y-6 animate-fade-in-up">
@@ -134,10 +148,25 @@ export default function TrackBoard() {
           </p>
         </div>
         <div className="flex items-center gap-4">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => refetch()}
+            disabled={isRefetching}
+          >
+            <RefreshCw className={cn("h-4 w-4 mr-2", isRefetching && "animate-spin")} />
+            Refresh
+          </Button>
           <Badge variant="outline" className="gap-2 py-1.5">
             <Bell className="h-3.5 w-3.5" />
             {pendingCount} Pending
           </Badge>
+          {overdueCount > 0 && (
+            <Badge variant="destructive" className="gap-2 py-1.5">
+              <Clock className="h-3.5 w-3.5" />
+              {overdueCount} Overdue
+            </Badge>
+          )}
           {criticalCount > 0 && (
             <Badge className="gap-2 py-1.5 bg-esi-1 text-white pulse-critical">
               <AlertTriangle className="h-3.5 w-3.5" />
@@ -199,135 +228,178 @@ export default function TrackBoard() {
         </CardContent>
       </Card>
 
-      {/* Track Board Table - with horizontal scroll for mobile */}
+      {/* Track Board Table */}
       <Card className="clinical-card">
         <div className="overflow-x-auto">
-          <Table>
-            <TableHeader>
-              <TableRow className="hover:bg-transparent">
-                <TableHead 
-                  className="cursor-pointer hover:text-foreground"
-                  onClick={() => toggleSort('esi')}
-                >
-                  <div className="flex items-center">
-                    ESI
-                    <SortIcon column="esi" />
-                  </div>
-                </TableHead>
-                <TableHead>Patient</TableHead>
-                <TableHead className="hidden md:table-cell">Chief Complaint</TableHead>
-                <TableHead 
-                  className="cursor-pointer hover:text-foreground"
-                  onClick={() => toggleSort('time')}
-                >
-                  <div className="flex items-center">
-                    Wait Time
-                    <SortIcon column="time" />
-                  </div>
-                </TableHead>
-                <TableHead className="hidden sm:table-cell">Target Response</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead className="text-right">Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {filteredCases.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={7} className="h-32 text-center">
-                    <p className="text-muted-foreground">No cases match your filters</p>
-                  </TableCell>
+          {isLoading ? (
+            <div className="p-8 space-y-4">
+              {[...Array(5)].map((_, i) => (
+                <Skeleton key={i} className="h-16 w-full" />
+              ))}
+            </div>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow className="hover:bg-transparent">
+                  <TableHead 
+                    className="cursor-pointer hover:text-foreground"
+                    onClick={() => toggleSort('esi')}
+                  >
+                    <div className="flex items-center">
+                      ESI
+                      <SortIcon column="esi" />
+                    </div>
+                  </TableHead>
+                  <TableHead>Patient</TableHead>
+                  <TableHead className="hidden md:table-cell">Chief Complaint</TableHead>
+                  <TableHead 
+                    className="cursor-pointer hover:text-foreground"
+                    onClick={() => toggleSort('time')}
+                  >
+                    <div className="flex items-center">
+                      Wait Time
+                      <SortIcon column="time" />
+                    </div>
+                  </TableHead>
+                  <TableHead className="hidden sm:table-cell">Target Response</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
-              ) : (
-                filteredCases.map((triageCase) => {
-                  const esiLevel = triageCase.validation?.validatedESI || 3;
-                  const waitTime = formatDistanceToNow(triageCase.patient.arrivalTime, { addSuffix: false });
-                  const isAcknowledged = !!triageCase.acknowledgedAt;
-                  const isCritical = esiLevel <= 2;
+              </TableHeader>
+              <TableBody>
+                {filteredCases.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={7} className="h-32 text-center">
+                      <p className="text-muted-foreground">No cases match your filters</p>
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  filteredCases.map((triageCase) => {
+                    const esiLevel = triageCase.esiLevel as ESILevel;
+                    const isAcknowledged = triageCase.status === 'acknowledged';
+                    const isCritical = esiLevel <= 2;
 
-                  return (
-                    <TableRow 
-                      key={triageCase.id}
-                      className={cn(
-                        'cursor-pointer transition-colors focus-within:bg-accent',
-                        isCritical && !isAcknowledged && 'table-row-critical',
-                      )}
-                      onClick={() => handleSelectCase(triageCase)}
-                      tabIndex={0}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter' || e.key === ' ') {
-                          e.preventDefault();
-                          handleSelectCase(triageCase);
-                        }
-                      }}
-                    >
-                      <TableCell>
-                        <ESIBadge level={esiLevel} size="sm" />
-                      </TableCell>
-                      <TableCell>
-                        <div>
-                          <p className="font-medium">
-                            {triageCase.patient.lastName}, {triageCase.patient.firstName}
-                          </p>
-                          <p className="text-xs text-muted-foreground">
-                            {triageCase.patient.age}yo {triageCase.patient.gender} • {triageCase.patient.mrn}
-                          </p>
-                        </div>
-                      </TableCell>
-                      <TableCell className="max-w-xs hidden md:table-cell">
-                        <p className="text-sm truncate">{triageCase.patient.chiefComplaint}</p>
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex items-center gap-1.5">
-                          <Clock className="h-3.5 w-3.5 text-muted-foreground" />
-                          <span className="font-vitals">{waitTime}</span>
-                        </div>
-                      </TableCell>
-                      <TableCell className="hidden sm:table-cell">
-                        <Badge 
-                          variant="outline"
-                          className={cn(
-                            'text-xs',
-                            isCritical && 'border-esi-1/30 text-esi-1'
-                          )}
-                        >
-                          {ESI_RESPONSE_TIMES[esiLevel]}
-                        </Badge>
-                      </TableCell>
-                      <TableCell>
-                        {isAcknowledged ? (
-                          <Badge className="bg-confidence-high gap-1">
-                            <CheckCircle2 className="h-3 w-3" />
-                            <span className="hidden sm:inline">Acknowledged</span>
-                            <span className="sm:hidden">Ack</span>
-                          </Badge>
-                        ) : (
-                          <Badge variant="outline" className="gap-1 border-status-pending/30 text-status-pending">
-                            <Clock className="h-3 w-3" />
-                            Pending
-                          </Badge>
+                    return (
+                      <TableRow 
+                        key={triageCase.id}
+                        className={cn(
+                          'cursor-pointer transition-colors focus-within:bg-accent',
+                          isCritical && !isAcknowledged && 'table-row-critical',
+                          triageCase.isOverdue && 'bg-destructive/5',
                         )}
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <Button
-                          size="sm"
-                          variant={isAcknowledged ? 'ghost' : 'default'}
-                          onClick={(e) => {
-                            e.stopPropagation();
+                        onClick={() => handleSelectCase(triageCase)}
+                        tabIndex={0}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault();
                             handleSelectCase(triageCase);
-                          }}
-                        >
-                          {isAcknowledged ? 'View' : 'Review'}
-                          <ExternalLink className="h-3.5 w-3.5 ml-1.5" />
-                        </Button>
-                      </TableCell>
-                    </TableRow>
-                  );
-                })
-              )}
-            </TableBody>
-          </Table>
+                          }
+                        }}
+                      >
+                        <TableCell>
+                          <ESIBadge level={esiLevel} size="sm" />
+                        </TableCell>
+                        <TableCell>
+                          <div>
+                            <p className="font-medium">
+                              {triageCase.patient.lastName}, {triageCase.patient.firstName}
+                            </p>
+                            <p className="text-xs text-muted-foreground">
+                              {triageCase.patient.age}yo {triageCase.patient.gender} • {triageCase.patient.mrn}
+                            </p>
+                          </div>
+                        </TableCell>
+                        <TableCell className="max-w-xs hidden md:table-cell">
+                          <p className="text-sm truncate">{triageCase.patient.chiefComplaint}</p>
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex items-center gap-1.5">
+                            <Clock className={cn(
+                              "h-3.5 w-3.5",
+                              triageCase.isOverdue ? "text-destructive" : "text-muted-foreground"
+                            )} />
+                            <span className={cn(
+                              "font-vitals",
+                              triageCase.isOverdue && "text-destructive font-semibold"
+                            )}>
+                              {triageCase.waitTimeFormatted}
+                            </span>
+                            {triageCase.isOverdue && (
+                              <Badge variant="destructive" className="text-xs ml-1">
+                                Overdue
+                              </Badge>
+                            )}
+                          </div>
+                        </TableCell>
+                        <TableCell className="hidden sm:table-cell">
+                          <Badge 
+                            variant="outline"
+                            className={cn(
+                              'text-xs',
+                              isCritical && 'border-esi-1/30 text-esi-1'
+                            )}
+                          >
+                            {ESI_RESPONSE_TIMES[esiLevel]}
+                          </Badge>
+                        </TableCell>
+                        <TableCell>
+                          {isAcknowledged ? (
+                            <Badge className="bg-confidence-high gap-1">
+                              <CheckCircle2 className="h-3 w-3" />
+                              <span className="hidden sm:inline">Acknowledged</span>
+                              <span className="sm:hidden">Ack</span>
+                            </Badge>
+                          ) : (
+                            <Badge variant="outline" className="gap-1 border-status-pending/30 text-status-pending">
+                              <Clock className="h-3 w-3" />
+                              Pending
+                            </Badge>
+                          )}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <Button
+                            size="sm"
+                            variant={isAcknowledged ? 'ghost' : 'default'}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleSelectCase(triageCase);
+                            }}
+                          >
+                            {isAcknowledged ? 'View' : 'Review'}
+                            <ExternalLink className="h-3.5 w-3.5 ml-1.5" />
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })
+                )}
+              </TableBody>
+            </Table>
+          )}
         </div>
       </Card>
+
+      {/* Summary Stats */}
+      {trackBoardData?.summary && (
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <Card className="clinical-card p-4">
+            <p className="text-sm text-muted-foreground">Total Cases</p>
+            <p className="text-2xl font-bold">{trackBoardData.summary.total}</p>
+          </Card>
+          <Card className="clinical-card p-4">
+            <p className="text-sm text-muted-foreground">ESI 3</p>
+            <p className="text-2xl font-bold">{trackBoardData.summary.byESI[3] || 0}</p>
+          </Card>
+          <Card className="clinical-card p-4">
+            <p className="text-sm text-muted-foreground">ESI 4</p>
+            <p className="text-2xl font-bold">{trackBoardData.summary.byESI[4] || 0}</p>
+          </Card>
+          <Card className="clinical-card p-4">
+            <p className="text-sm text-muted-foreground">ESI 5</p>
+            <p className="text-2xl font-bold">{trackBoardData.summary.byESI[5] || 0}</p>
+          </Card>
+        </div>
+      )}
 
       {/* Case Detail Dialog */}
       <Dialog open={!!selectedCase} onOpenChange={handleCloseDialog}>
@@ -341,7 +413,7 @@ export default function TrackBoard() {
                 <DialogHeader>
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-3">
-                      <ESIBadge level={selectedCase.validation?.validatedESI || 3} size="lg" />
+                      <ESIBadge level={selectedCase.esiLevel as ESILevel} size="lg" />
                       <div>
                         <DialogTitle className="text-xl">
                           {selectedCase.patient.lastName}, {selectedCase.patient.firstName}
@@ -355,13 +427,26 @@ export default function TrackBoard() {
                 </DialogHeader>
 
                 {/* Critical Alert */}
-                {isSelectedCritical && !selectedCase.acknowledgedAt && (
+                {isSelectedCritical && selectedCase.status !== 'acknowledged' && (
                   <div className="alert-banner-critical mt-4">
                     <AlertTriangle className="h-5 w-5" />
                     <div className="flex-1">
                       <p className="font-semibold">Critical Case - Immediate Action Required</p>
                       <p className="text-sm opacity-80">
-                        Target response: {ESI_RESPONSE_TIMES[selectedEsiLevel!]}
+                        Target response: {ESI_RESPONSE_TIMES[selectedCase.esiLevel as ESILevel]}
+                      </p>
+                    </div>
+                  </div>
+                )}
+
+                {/* Overdue Alert */}
+                {selectedCase.isOverdue && (
+                  <div className="flex items-center gap-2 p-3 bg-destructive/10 border border-destructive/30 rounded-lg mt-4">
+                    <Clock className="h-5 w-5 text-destructive" />
+                    <div>
+                      <p className="font-semibold text-destructive">Overdue by {selectedCase.overdueFormatted}</p>
+                      <p className="text-sm text-muted-foreground">
+                        Patient has been waiting longer than target time
                       </p>
                     </div>
                   </div>
@@ -379,41 +464,35 @@ export default function TrackBoard() {
                     </p>
                   </div>
 
-                  {/* Vitals */}
-                  <div>
-                    <h4 className="text-sm font-medium mb-2">Vital Signs</h4>
-                    <VitalsDisplay vitals={selectedCase.patient.vitals} layout="compact" />
-                  </div>
-
                   {/* SBAR */}
-                  {selectedCase.aiResult && (
+                  {selectedCase.sbar && (
                     <div>
                       <h4 className="text-sm font-medium mb-2">SBAR Summary</h4>
-                      <SBARDisplay sbar={selectedCase.aiResult.sbar} layout="compact" />
+                      <SBARDisplay sbar={selectedCase.sbar as SBARSummary} layout="compact" />
                     </div>
                   )}
 
-                  {/* Allergies & Meds */}
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  {/* Allergies */}
+                  {selectedCase.patient.allergies && selectedCase.patient.allergies.length > 0 && (
                     <div>
                       <h4 className="text-sm font-medium mb-1">Allergies</h4>
-                      {selectedCase.patient.allergies?.length ? (
-                        <div className="flex flex-wrap gap-1">
-                          {selectedCase.patient.allergies.map((a, i) => (
-                            <Badge key={i} variant="destructive" className="text-xs">{a}</Badge>
-                          ))}
-                        </div>
-                      ) : (
-                        <p className="text-sm text-muted-foreground">NKDA</p>
-                      )}
+                      <div className="flex flex-wrap gap-1">
+                        {selectedCase.patient.allergies.map((a, i) => (
+                          <Badge key={i} variant="destructive" className="text-xs">{a}</Badge>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Wait Time Info */}
+                  <div className="grid grid-cols-2 gap-4 p-3 bg-muted/30 rounded-lg">
+                    <div>
+                      <p className="text-xs text-muted-foreground">Wait Time</p>
+                      <p className="font-vitals text-lg">{selectedCase.waitTimeFormatted}</p>
                     </div>
                     <div>
-                      <h4 className="text-sm font-medium mb-1">Current Medications</h4>
-                      {selectedCase.patient.medications?.length ? (
-                        <p className="text-sm">{selectedCase.patient.medications.join(', ')}</p>
-                      ) : (
-                        <p className="text-sm text-muted-foreground">None reported</p>
-                      )}
+                      <p className="text-xs text-muted-foreground">Arrived</p>
+                      <p className="text-sm">{new Date(selectedCase.patient.arrivalTime).toLocaleTimeString()}</p>
                     </div>
                   </div>
                 </div>
@@ -422,7 +501,7 @@ export default function TrackBoard() {
                   <Button variant="outline" onClick={handleCloseDialog}>
                     Close
                   </Button>
-                  {!selectedCase.acknowledgedAt && (
+                  {selectedCase.status !== 'acknowledged' && (
                     <Button 
                       onClick={handleAcknowledge} 
                       disabled={isAcknowledging} 
@@ -431,12 +510,12 @@ export default function TrackBoard() {
                       {isAcknowledging ? (
                         <>
                           <Loader2 className="h-4 w-4 animate-spin" />
-                          Acknowledging...
+                          Processing...
                         </>
                       ) : (
                         <>
-                          <Play className="h-4 w-4" />
-                          Acknowledge & Start Workup
+                          <CheckCircle2 className="h-4 w-4" />
+                          Acknowledge Case
                         </>
                       )}
                     </Button>

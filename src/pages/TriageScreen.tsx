@@ -25,13 +25,18 @@ import { VitalsDisplay } from '@/components/triage/VitalsDisplay';
 import { SBARDisplay } from '@/components/triage/SBARDisplay';
 import { ConfidenceIndicator } from '@/components/triage/ConfidenceIndicator';
 import { useEmergency } from '@/contexts/EmergencyContext';
-import { mockPatients, generateAITriageResult } from '@/data/mockData';
+import { useAuth } from '@/contexts/AuthContext';
+import { usePatient } from '@/integrations/supabase/hooks/usePatients';
+import { useLatestVitals } from '@/integrations/supabase/hooks/useVitalSigns';
+import { useAITriage, useValidateTriage } from '@/integrations/supabase/hooks';
+import { supabase } from '@/integrations/supabase/client';
 import { 
   ESILevel, 
   AITriageResult, 
   OverrideRationale, 
   OVERRIDE_RATIONALE_LABELS,
-  ESI_LABELS
+  ESI_LABELS,
+  VitalSigns
 } from '@/types/triage';
 import { 
   ArrowLeft, 
@@ -46,19 +51,25 @@ import {
   History
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { toast } from 'sonner';
 
 export default function TriageScreen() {
   const navigate = useNavigate();
   const { patientId } = useParams();
+  const { user } = useAuth();
   const { activateEmergencyMode, deactivateEmergencyMode, checkCriticalState } = useEmergency();
   
-  // Find patient - use first in-triage patient as fallback
-  const patient = patientId === 'new-patient' 
-    ? mockPatients[5] // Use Lisa Anderson (stroke patient) for new intake
-    : mockPatients.find(p => p.id === patientId) || mockPatients[0];
+  // Fetch patient data from database
+  const { data: patient, isLoading: isLoadingPatient } = usePatient(patientId);
+  const { data: latestVitals } = useLatestVitals(patientId);
+  
+  // AI Triage mutation
+  const aiTriageMutation = useAITriage();
+  const validateMutation = useValidateTriage();
   
   const [isAnalyzing, setIsAnalyzing] = useState(true);
   const [aiResult, setAIResult] = useState<AITriageResult | null>(null);
+  const [triageCaseId, setTriageCaseId] = useState<string | null>(null);
   const [selectedESI, setSelectedESI] = useState<ESILevel | null>(null);
   const [isOverriding, setIsOverriding] = useState(false);
   const [overrideRationale, setOverrideRationale] = useState<OverrideRationale | ''>('');
@@ -66,34 +77,109 @@ export default function TriageScreen() {
   const [showConfirmDialog, setShowConfirmDialog] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Simulate AI analysis
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      const result = generateAITriageResult(patient);
-      setAIResult(result);
-      setSelectedESI(result.draftESI);
-      setIsAnalyzing(false);
-      
-      // Activate emergency mode for critical patients
-      if (checkCriticalState(result.draftESI)) {
-        activateEmergencyMode(patient.id);
-      }
-    }, 2500);
+  // Calculate age from date of birth
+  const calculateAge = (dob: string): number => {
+    const birthDate = new Date(dob);
+    const today = new Date();
+    let age = today.getFullYear() - birthDate.getFullYear();
+    const monthDiff = today.getMonth() - birthDate.getMonth();
+    if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
+      age--;
+    }
+    return age;
+  };
 
+  // Convert database vitals to app format
+  const formatVitals = (): VitalSigns | null => {
+    if (!latestVitals) return null;
+    return {
+      heartRate: latestVitals.heart_rate || 0,
+      bloodPressure: {
+        systolic: latestVitals.systolic_bp || 0,
+        diastolic: latestVitals.diastolic_bp || 0,
+      },
+      respiratoryRate: latestVitals.respiratory_rate || 0,
+      temperature: Number(latestVitals.temperature) || 0,
+      oxygenSaturation: latestVitals.oxygen_saturation || 0,
+      painLevel: latestVitals.pain_level || 0,
+      timestamp: new Date(latestVitals.recorded_at),
+    };
+  };
+
+  // Trigger AI analysis when patient data is loaded
+  useEffect(() => {
+    if (patient && patientId && !aiResult && !aiTriageMutation.isPending) {
+      const vitals = formatVitals();
+      const age = calculateAge(patient.date_of_birth);
+      
+      aiTriageMutation.mutate({
+        patientId,
+        chiefComplaint: patient.chief_complaint,
+        vitals: vitals ? {
+          heartRate: vitals.heartRate,
+          systolicBp: vitals.bloodPressure.systolic,
+          diastolicBp: vitals.bloodPressure.diastolic,
+          respiratoryRate: vitals.respiratoryRate,
+          temperature: vitals.temperature,
+          oxygenSaturation: vitals.oxygenSaturation,
+          painLevel: vitals.painLevel,
+        } : undefined,
+        allergies: patient.allergies || undefined,
+        medications: patient.medications || undefined,
+        medicalHistory: patient.medical_history || undefined,
+        age,
+        gender: patient.gender,
+      }, {
+        onSuccess: (data) => {
+          setTriageCaseId(data.triageCaseId);
+          const result: AITriageResult = {
+            draftESI: data.aiResult.draftESI as ESILevel,
+            confidence: data.aiResult.confidence,
+            sbar: data.aiResult.sbar,
+            extractedSymptoms: data.aiResult.extractedSymptoms,
+            extractedTimeline: data.aiResult.timeline,
+            comorbidities: data.aiResult.comorbidities,
+            influencingFactors: data.aiResult.influencingFactors.map(f => ({
+              factor: f.factor,
+              category: f.category as 'vital' | 'symptom' | 'history' | 'age' | 'other',
+              impact: f.impact as 'increases' | 'decreases' | 'neutral',
+              weight: f.weight,
+            })),
+            generatedAt: new Date(),
+          };
+          setAIResult(result);
+          setSelectedESI(result.draftESI);
+          setIsAnalyzing(false);
+          
+          // Activate emergency mode for critical patients
+          if (checkCriticalState(result.draftESI)) {
+            activateEmergencyMode(patientId);
+          }
+        },
+        onError: (error) => {
+          console.error('AI Triage error:', error);
+          toast.error('AI analysis failed. Please try again.');
+          setIsAnalyzing(false);
+        },
+      });
+    }
+  }, [patient, patientId, latestVitals]);
+
+  // Cleanup on unmount
+  useEffect(() => {
     return () => {
-      clearTimeout(timer);
       deactivateEmergencyMode();
     };
-  }, [patient, activateEmergencyMode, deactivateEmergencyMode, checkCriticalState]);
+  }, [deactivateEmergencyMode]);
 
   // Update emergency state when ESI changes
   useEffect(() => {
-    if (selectedESI && checkCriticalState(selectedESI)) {
-      activateEmergencyMode(patient.id);
+    if (selectedESI && patientId && checkCriticalState(selectedESI)) {
+      activateEmergencyMode(patientId);
     } else {
       deactivateEmergencyMode();
     }
-  }, [selectedESI, patient.id, activateEmergencyMode, deactivateEmergencyMode, checkCriticalState]);
+  }, [selectedESI, patientId, activateEmergencyMode, deactivateEmergencyMode, checkCriticalState]);
 
   const handleESIChange = (level: ESILevel) => {
     setSelectedESI(level);
@@ -108,22 +194,44 @@ export default function TriageScreen() {
 
   const handleConfirm = () => {
     if (isOverriding && !overrideRationale) {
-      return; // Require rationale for override
+      return;
     }
     setShowConfirmDialog(true);
   };
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
+    if (!triageCaseId || !selectedESI) return;
+    
     setIsSubmitting(true);
     
-    // Simulate submission
-    setTimeout(() => {
-      setIsSubmitting(false);
-      setShowConfirmDialog(false);
+    try {
+      await validateMutation.mutateAsync({
+        triageCaseId,
+        action: isOverriding ? 'override' : 'confirm',
+        overrideESI: isOverriding ? selectedESI : undefined,
+        overrideRationale: isOverriding ? overrideRationale : undefined,
+        overrideNotes: overrideNotes || undefined,
+      });
+      
+      toast.success('Triage validated successfully');
       deactivateEmergencyMode();
       navigate('/nurse/queue');
-    }, 1500);
+    } catch (error) {
+      console.error('Validation error:', error);
+      toast.error('Failed to validate triage. Please try again.');
+    } finally {
+      setIsSubmitting(false);
+      setShowConfirmDialog(false);
+    }
   };
+
+  if (isLoadingPatient) {
+    return (
+      <div className="flex items-center justify-center h-96">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
+  }
 
   if (!patient) {
     return (
@@ -133,7 +241,10 @@ export default function TriageScreen() {
     );
   }
 
+  const vitals = formatVitals();
+  const age = calculateAge(patient.date_of_birth);
   const isCritical = selectedESI ? checkCriticalState(selectedESI) : false;
+  const arrivalTime = new Date(patient.arrival_time);
 
   return (
     <div className="max-w-6xl mx-auto space-y-6 animate-fade-in-up">
@@ -187,9 +298,9 @@ export default function TriageScreen() {
               <div>
                 <div className="flex items-center gap-2">
                   <h2 className="text-xl font-semibold">
-                    {patient.lastName}, {patient.firstName}
+                    {patient.last_name}, {patient.first_name}
                   </h2>
-                  {patient.isReturning && (
+                  {patient.is_returning && (
                     <Badge variant="outline">
                       <History className="h-3 w-3 mr-1" />
                       Returning
@@ -197,11 +308,11 @@ export default function TriageScreen() {
                   )}
                 </div>
                 <div className="flex items-center gap-4 mt-1 text-sm text-muted-foreground">
-                  <span>{patient.age}yo {patient.gender}</span>
+                  <span>{age}yo {patient.gender}</span>
                   <span className="font-mono">{patient.mrn}</span>
                   <span className="flex items-center gap-1">
                     <Clock className="h-3 w-3" />
-                    Arrived {Math.round((Date.now() - patient.arrivalTime.getTime()) / 60000)} min ago
+                    Arrived {Math.round((Date.now() - arrivalTime.getTime()) / 60000)} min ago
                   </span>
                 </div>
               </div>
@@ -221,15 +332,17 @@ export default function TriageScreen() {
           )}>
             <p className="text-sm">
               <span className="font-semibold">Chief Complaint: </span>
-              {patient.chiefComplaint}
+              {patient.chief_complaint}
             </p>
           </div>
 
           {/* Vitals */}
-          <div className="mt-4">
-            <Label className="text-sm mb-2 block">Current Vital Signs</Label>
-            <VitalsDisplay vitals={patient.vitals} />
-          </div>
+          {vitals && (
+            <div className="mt-4">
+              <Label className="text-sm mb-2 block">Current Vital Signs</Label>
+              <VitalsDisplay vitals={vitals} />
+            </div>
+          )}
         </CardContent>
       </Card>
 
@@ -245,7 +358,7 @@ export default function TriageScreen() {
               <h3 className="text-xl font-semibold mt-6 mb-2">AI Analysis in Progress</h3>
               <p className="text-muted-foreground max-w-md">
                 Extracting clinical information, analyzing vitals, and generating 
-                SBAR summary with ESI recommendation...
+                SBAR summary with ESI recommendation using Gemini AI...
               </p>
               <div className="flex items-center gap-2 mt-6 text-sm text-muted-foreground">
                 <Loader2 className="h-4 w-4 animate-spin" />
@@ -269,7 +382,7 @@ export default function TriageScreen() {
                 </CardTitle>
                 <Badge variant="secondary" className="gap-1">
                   <Sparkles className="h-3 w-3" />
-                  Auto-generated
+                  Gemini AI
                 </Badge>
               </div>
               <CardDescription>
@@ -457,7 +570,7 @@ export default function TriageScreen() {
             {selectedESI && selectedESI <= 2 && (
               <div className="flex items-center gap-2 p-3 bg-esi-2-bg rounded-lg text-sm border border-[hsl(var(--esi-2-border))]">
                 <AlertTriangle className="h-4 w-4 text-esi-2" />
-                <span>High-acuity case will be immediately routed to physician</span>
+                <span>This patient will be routed to a physician immediately.</span>
               </div>
             )}
           </div>

@@ -30,6 +30,10 @@ import {
 import { cn } from '@/lib/utils';
 import { VitalSigns } from '@/types/triage';
 import { toast } from 'sonner';
+import { useCreatePatient, usePatients } from '@/integrations/supabase/hooks';
+import { useRecordVitals } from '@/integrations/supabase/hooks/useVitalSigns';
+import { supabase } from '@/integrations/supabase/client';
+import { useAuth } from '@/contexts/AuthContext';
 
 interface UploadedFile {
   id: string;
@@ -48,6 +52,10 @@ interface FormErrors {
 
 export default function PatientIntakePage() {
   const navigate = useNavigate();
+  const { user } = useAuth();
+  const createPatient = useCreatePatient();
+  const recordVitals = useRecordVitals();
+  
   const [step, setStep] = useState<'demographics' | 'vitals' | 'complaint' | 'documents'>('demographics');
   const [isSearching, setIsSearching] = useState(false);
   const [patientFound, setPatientFound] = useState(false);
@@ -55,6 +63,7 @@ export default function PatientIntakePage() {
   const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([]);
   const [errors, setErrors] = useState<FormErrors>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [existingPatientId, setExistingPatientId] = useState<string | null>(null);
   
   // Form state
   const [formData, setFormData] = useState({
@@ -111,34 +120,47 @@ export default function PatientIntakePage() {
     return Object.keys(newErrors).length === 0;
   };
 
-  const handleMRNSearch = () => {
+  const handleMRNSearch = async () => {
     if (!formData.mrn) return;
     setIsSearching(true);
     setPatientNotFound(false);
     setPatientFound(false);
+    setExistingPatientId(null);
     
-    // Simulate search
-    setTimeout(() => {
-      setIsSearching(false);
-      if (formData.mrn === 'MRN-2024-002') {
+    try {
+      const { data: patient, error } = await supabase
+        .from('patients')
+        .select('*')
+        .eq('mrn', formData.mrn)
+        .maybeSingle();
+      
+      if (error) throw error;
+      
+      if (patient) {
         setPatientFound(true);
         setPatientNotFound(false);
+        setExistingPatientId(patient.id);
         setFormData(prev => ({
           ...prev,
-          firstName: 'Sarah',
-          lastName: 'Johnson',
-          dateOfBirth: '1991-05-15',
-          gender: 'female',
-          allergies: '',
-          medications: 'Albuterol inhaler, Fluticasone',
-          medicalHistory: 'Asthma - severe persistent',
+          firstName: patient.first_name,
+          lastName: patient.last_name,
+          dateOfBirth: patient.date_of_birth,
+          gender: patient.gender,
+          allergies: patient.allergies?.join(', ') || '',
+          medications: patient.medications?.join(', ') || '',
+          medicalHistory: patient.medical_history?.join(', ') || '',
         }));
         setErrors({});
       } else {
         setPatientNotFound(true);
         setPatientFound(false);
       }
-    }, 1000);
+    } catch (error) {
+      console.error('Error searching patient:', error);
+      toast.error('Failed to search for patient');
+    } finally {
+      setIsSearching(false);
+    }
   };
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -175,14 +197,98 @@ export default function PatientIntakePage() {
     }
   };
 
-  const handleStartTriage = () => {
+  const generateMRN = () => {
+    const timestamp = Date.now().toString(36).toUpperCase();
+    const random = Math.random().toString(36).substring(2, 6).toUpperCase();
+    return `MRN-${timestamp}-${random}`;
+  };
+
+  const handleStartTriage = async () => {
+    if (!user) {
+      toast.error('You must be logged in to create a patient');
+      navigate('/auth');
+      return;
+    }
+
     setIsSubmitting(true);
-    // Simulate saving
-    setTimeout(() => {
-      setIsSubmitting(false);
+    
+    try {
+      let patientId = existingPatientId;
+      
+      // Create new patient if not found by MRN
+      if (!patientId) {
+        const mrn = formData.mrn || generateMRN();
+        
+        const newPatient = await createPatient.mutateAsync({
+          mrn,
+          first_name: formData.firstName,
+          last_name: formData.lastName,
+          date_of_birth: formData.dateOfBirth,
+          gender: formData.gender as 'male' | 'female' | 'other',
+          chief_complaint: formData.chiefComplaint,
+          allergies: formData.allergies ? formData.allergies.split(',').map(a => a.trim()) : null,
+          medications: formData.medications ? formData.medications.split(',').map(m => m.trim()) : null,
+          medical_history: formData.medicalHistory ? formData.medicalHistory.split(',').map(h => h.trim()) : null,
+          status: 'in_triage',
+          is_returning: patientFound,
+        });
+        
+        patientId = newPatient.id;
+      } else {
+        // Update existing patient with new chief complaint
+        await supabase
+          .from('patients')
+          .update({
+            chief_complaint: formData.chiefComplaint,
+            status: 'in_triage',
+            is_returning: true,
+          })
+          .eq('id', patientId);
+      }
+
+      // Record vitals if any were entered
+      const hasAnyVital = vitals.heartRate > 0 || 
+        vitals.bloodPressure.systolic > 0 || 
+        vitals.bloodPressure.diastolic > 0 ||
+        vitals.respiratoryRate > 0 ||
+        vitals.temperature > 0 ||
+        vitals.oxygenSaturation > 0 ||
+        vitals.painLevel > 0;
+
+      if (hasAnyVital && patientId) {
+        await recordVitals.mutateAsync({
+          patient_id: patientId,
+          heart_rate: vitals.heartRate > 0 ? vitals.heartRate : null,
+          systolic_bp: vitals.bloodPressure.systolic > 0 ? vitals.bloodPressure.systolic : null,
+          diastolic_bp: vitals.bloodPressure.diastolic > 0 ? vitals.bloodPressure.diastolic : null,
+          respiratory_rate: vitals.respiratoryRate > 0 ? vitals.respiratoryRate : null,
+          temperature: vitals.temperature > 0 ? vitals.temperature : null,
+          oxygen_saturation: vitals.oxygenSaturation > 0 ? vitals.oxygenSaturation : null,
+          pain_level: vitals.painLevel,
+          recorded_by: user.id,
+        });
+      }
+
+      // Create initial triage case
+      const { error: triageError } = await supabase
+        .from('triage_cases')
+        .insert({
+          patient_id: patientId,
+          status: 'in_triage',
+        });
+
+      if (triageError) {
+        console.error('Error creating triage case:', triageError);
+      }
+
       toast.success('Patient registered successfully');
-      navigate('/nurse/triage/new-patient');
-    }, 1000);
+      navigate(`/nurse/triage/${patientId}`);
+    } catch (error) {
+      console.error('Error creating patient:', error);
+      toast.error('Failed to register patient. Please try again.');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const steps = [
@@ -277,12 +383,13 @@ export default function PatientIntakePage() {
                 </Label>
                 <div className="flex gap-2">
                   <Input
-                    placeholder="Enter MRN... (try MRN-2024-002)"
+                    placeholder="Enter MRN..."
                     value={formData.mrn}
                     onChange={(e) => {
                       setFormData(prev => ({ ...prev, mrn: e.target.value }));
                       setPatientNotFound(false);
                       setPatientFound(false);
+                      setExistingPatientId(null);
                     }}
                     className="max-w-xs"
                   />
@@ -509,7 +616,7 @@ export default function PatientIntakePage() {
                 </div>
               </div>
 
-              {/* Pain Level Slider - Using shadcn Slider */}
+              {/* Pain Level Slider */}
               <div className="space-y-3">
                 <div className="flex items-center justify-between">
                   <Label>Pain Level (0-10)</Label>
@@ -531,7 +638,7 @@ export default function PatientIntakePage() {
                 </div>
               </div>
 
-              {/* Preview - Show when ANY vital is entered */}
+              {/* Preview */}
               {hasAnyVital && (
                 <div className="p-4 bg-muted/30 rounded-lg">
                   <Label className="text-sm mb-3 block">Vitals Preview</Label>
