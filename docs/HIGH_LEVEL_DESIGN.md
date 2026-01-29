@@ -516,36 +516,66 @@ SMART on FHIR Launch
 
 ### LLM Integration (Model A)
 
-**Provider:** Lovable AI Gateway (Google Gemini)  
-**Endpoint:** `https://ai.gateway.lovable.dev/v1/chat/completions`  
-**Model:** `google/gemini-3-flash-preview` (default)  
+**Provider:** Google Gemini API (Direct)  
+**Endpoint:** `https://generativelanguage.googleapis.com/v1beta/models`  
+**Model:** `gemini-2.0-flash` (recommended) or `gemini-1.5-pro`  
+**Secret:** `GEMINI_API_KEY` (user-provided, stored in Supabase secrets)
 
 ```typescript
 // Edge function configuration
 const LLM_CONFIG = {
-  model: "google/gemini-3-flash-preview",
-  temperature: 0.1,        // Low for deterministic extraction
-  max_tokens: 2048,
-  top_p: 0.95,
+  model: "gemini-2.0-flash",  // Fast, cost-effective
+  // Alternative: "gemini-1.5-pro" for complex reasoning
+  temperature: 0.1,           // Low for deterministic extraction
+  maxOutputTokens: 2048,
+  topP: 0.95,
 };
 
-// Request structure
-const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+// Google Gemini API endpoint
+const GEMINI_ENDPOINT = `https://generativelanguage.googleapis.com/v1beta/models/${LLM_CONFIG.model}:generateContent`;
+
+// Request structure (Google Gemini native format)
+const response = await fetch(`${GEMINI_ENDPOINT}?key=${Deno.env.get("GEMINI_API_KEY")}`, {
   method: "POST",
   headers: {
-    Authorization: `Bearer ${Deno.env.get("LOVABLE_API_KEY")}`,
     "Content-Type": "application/json",
   },
   body: JSON.stringify({
-    model: LLM_CONFIG.model,
-    messages: [
-      { role: "system", content: CLINICAL_EXTRACTION_PROMPT },
-      { role: "user", content: patientContextJSON },
+    contents: [
+      {
+        role: "user",
+        parts: [
+          { text: `${CLINICAL_EXTRACTION_PROMPT}\n\n${patientContextJSON}` }
+        ]
+      }
     ],
-    tools: [{ type: "function", function: SBAR_EXTRACTION_TOOL }],
-    tool_choice: { type: "function", function: { name: "extract_clinical_data" } },
+    generationConfig: {
+      temperature: LLM_CONFIG.temperature,
+      maxOutputTokens: LLM_CONFIG.maxOutputTokens,
+      topP: LLM_CONFIG.topP,
+      responseMimeType: "application/json",  // Force JSON output
+    },
+    // Tool/Function calling for structured output
+    tools: [{
+      functionDeclarations: [{
+        name: "extract_clinical_data",
+        description: "Extract structured clinical data and generate SBAR summary",
+        parameters: SBAR_EXTRACTION_SCHEMA
+      }]
+    }],
+    toolConfig: {
+      functionCallingConfig: {
+        mode: "ANY",
+        allowedFunctionNames: ["extract_clinical_data"]
+      }
+    }
   }),
 });
+
+// Parse Gemini response
+const result = await response.json();
+const functionCall = result.candidates?.[0]?.content?.parts?.[0]?.functionCall;
+const extractedData = functionCall?.args;
 ```
 
 ### Acuity Classifier (Model B)
@@ -859,10 +889,10 @@ interface AITriageResponse {
 │  └─────────────────────────────────────────────────────┘   │
 │                                                             │
 │  ┌─────────────────────────────────────────────────────┐   │
-│  │ Lovable AI Gateway                                   │   │
-│  │ • LLM inference (Gemini/GPT)                        │   │
-│  │ • Rate limiting                                      │   │
-│  │ • Cost tracking                                      │   │
+│  │ Google Gemini API (Direct)                           │   │
+│  │ • LLM inference (gemini-2.0-flash / gemini-1.5-pro) │   │
+│  │ • Function calling for structured output             │   │
+│  │ • User-provided API key (GEMINI_API_KEY)            │   │
 │  └─────────────────────────────────────────────────────┘   │
 │                                                             │
 │  ┌─────────────────────────────────────────────────────┐   │
@@ -879,7 +909,7 @@ interface AITriageResponse {
 |-----------|-----|----------------|
 | Database | Supabase Free/Pro | Supabase Enterprise or managed Postgres |
 | Edge Functions | Supabase Edge | Dedicated compute for latency-sensitive ops |
-| LLM Inference | Lovable AI Gateway | Self-hosted models for compliance |
+| LLM Inference | Google Gemini API | Vertex AI for enterprise SLA/compliance |
 | Realtime | Supabase Realtime | Dedicated WebSocket infrastructure |
 | XGBoost Model | Edge Function (ONNX) | Dedicated inference server |
 
@@ -1064,11 +1094,11 @@ CREATE TRIGGER audit_patients
 ```typescript
 // Edge function secrets (via Supabase)
 const REQUIRED_SECRETS = [
-  'LOVABLE_API_KEY',      // Auto-provisioned
-  'SUPABASE_URL',         // Auto-provisioned
-  'SUPABASE_ANON_KEY',    // Auto-provisioned
-  'FHIR_CLIENT_ID',       // Hospital-specific
-  'FHIR_CLIENT_SECRET',   // Hospital-specific
+  'GEMINI_API_KEY',         // User-provided Google Gemini API key
+  'SUPABASE_URL',           // Auto-provisioned
+  'SUPABASE_ANON_KEY',      // Auto-provisioned
+  'FHIR_CLIENT_ID',         // Hospital-specific
+  'FHIR_CLIENT_SECRET',     // Hospital-specific
 ];
 
 // Never log secrets
@@ -1274,11 +1304,12 @@ describe('Escalation Engine', () => {
 | Styling | Tailwind CSS + shadcn/ui | Consistent design system |
 | State | React Query + Context | Server/UI state separation |
 | Backend | Supabase (PostgreSQL + Edge Functions) | Managed, scalable, real-time |
-| LLM | Lovable AI Gateway (Gemini) | Pre-configured, cost-effective |
+| LLM | Google Gemini API (gemini-2.0-flash) | Direct integration, function calling, cost-effective |
 | Classifier | XGBoost (ONNX) | Deterministic, explainable, FDA-friendly |
 | Auth | Supabase Auth | JWT, RLS integration |
 | Real-time | Supabase Realtime | WebSocket subscriptions |
 | Hosting | Lovable Cloud | Integrated deployment |
+| API Key | GEMINI_API_KEY | User-provided, stored in Supabase secrets |
 
 ---
 
