@@ -1,12 +1,13 @@
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
-import { Activity } from 'lucide-react';
+import { NavBar } from '@/components/ui/tubelight-navbar';
+import { Activity, GitBranch, Shield, FileCheck, BookOpen } from 'lucide-react';
 
 const navItems = [
-  { label: 'Workflow', href: '#workflow' },
-  { label: 'Safety', href: '#safety' },
-  { label: 'Compliance', href: '#compliance' },
-  { label: 'Documentation', href: '#documentation' },
+  { name: 'Workflow', url: '#workflow', icon: GitBranch },
+  { name: 'Safety', url: '#safety', icon: Shield },
+  { name: 'Compliance', url: '#compliance', icon: FileCheck },
+  { name: 'Documentation', url: '#documentation', icon: BookOpen },
 ];
 
 export function Navbar() {
@@ -30,17 +31,14 @@ export function Navbar() {
           <span className="text-lg font-semibold text-foreground">TriageAI</span>
         </div>
 
-        {/* Nav Items */}
-        <nav className="hidden md:flex items-center gap-8">
-          {navItems.map((item) => (
-            <button
-              key={item.label}
-              onClick={() => handleNavClick(item.href)}
-              className="text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
-            >
-              {item.label}
-            </button>
-          ))}
+        {/* Tubelight Nav Items */}
+        <nav className="hidden md:flex">
+          <NavBar items={navItems} onItemClick={handleNavClick} />
+        </nav>
+
+        {/* Mobile Nav - simplified */}
+        <nav className="flex md:hidden">
+          <NavBar items={navItems} onItemClick={handleNavClick} />
         </nav>
 
         {/* Sign In */}
