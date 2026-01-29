@@ -181,7 +181,7 @@ export default function PatientIntakePage() {
     setTimeout(() => {
       setIsSubmitting(false);
       toast.success('Patient registered successfully');
-      navigate('/triage/new-patient');
+      navigate('/nurse/triage/new-patient');
     }, 1000);
   };
 

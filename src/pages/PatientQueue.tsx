@@ -50,7 +50,7 @@ export default function PatientQueue() {
             All patients in the emergency department
           </p>
         </div>
-        <Button onClick={() => navigate('/intake')} className="gap-2">
+        <Button onClick={() => navigate('/nurse/intake')} className="gap-2">
           <UserPlus className="h-4 w-4" />
           Add New Patient
         </Button>

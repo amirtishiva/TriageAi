@@ -227,7 +227,7 @@ export default function NurseDashboard() {
             <span className="font-vitals">{currentTime.toLocaleTimeString()}</span>
           </p>
         </div>
-        <Button onClick={() => navigate('/intake')} className="gap-2">
+        <Button onClick={() => navigate('/nurse/intake')} className="gap-2">
           <UserPlus className="h-4 w-4" />
           New Patient
         </Button>
@@ -274,7 +274,7 @@ export default function NurseDashboard() {
         <div className="lg:col-span-2 space-y-4">
           <div className="flex items-center justify-between">
             <h2 className="text-lg font-semibold">Patients Waiting for Triage</h2>
-            <Button variant="ghost" size="sm" onClick={() => navigate('/queue')}>
+            <Button variant="ghost" size="sm" onClick={() => navigate('/nurse/queue')}>
               View All
               <ChevronRight className="h-4 w-4 ml-1" />
             </Button>
@@ -295,7 +295,7 @@ export default function NurseDashboard() {
                   patient={patient}
                   showActions
                   actionLabel="Start Triage"
-                  onAction={() => navigate(`/triage/${patient.id}`)}
+                  onAction={() => navigate(`/nurse/triage/${patient.id}`)}
                 />
               ))}
             </div>
@@ -312,7 +312,7 @@ export default function NurseDashboard() {
                     patient={patient}
                     showActions
                     actionLabel="Continue"
-                    onAction={() => navigate(`/triage/${patient.id}`)}
+                    onAction={() => navigate(`/nurse/triage/${patient.id}`)}
                   />
                 ))}
               </div>
@@ -333,7 +333,7 @@ export default function NurseDashboard() {
               <Button 
                 variant="outline" 
                 className="w-full justify-start gap-2"
-                onClick={() => navigate('/intake')}
+                onClick={() => navigate('/nurse/intake')}
               >
                 <UserPlus className="h-4 w-4" />
                 Register New Patient
@@ -341,7 +341,7 @@ export default function NurseDashboard() {
               <Button 
                 variant="outline" 
                 className="w-full justify-start gap-2"
-                onClick={() => navigate('/queue')}
+                onClick={() => navigate('/nurse/queue')}
               >
                 <Users className="h-4 w-4" />
                 View Full Queue
@@ -349,7 +349,7 @@ export default function NurseDashboard() {
               <Button 
                 variant="outline" 
                 className="w-full justify-start gap-2"
-                onClick={() => navigate('/audit')}
+                onClick={() => navigate('/physician/audit')}
               >
                 <Activity className="h-4 w-4" />
                 View Audit Logs
@@ -400,7 +400,7 @@ export default function NurseDashboard() {
                     className="w-full"
                     onClick={() => {
                       setShowAlertsDialog(false);
-                      navigate(`/triage/${alert.patient.id}`);
+                      navigate(`/nurse/triage/${alert.patient.id}`);
                     }}
                   >
                     Review Case

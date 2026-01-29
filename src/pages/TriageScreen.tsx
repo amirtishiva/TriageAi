@@ -121,7 +121,7 @@ export default function TriageScreen() {
       setIsSubmitting(false);
       setShowConfirmDialog(false);
       deactivateEmergencyMode();
-      navigate('/queue');
+      navigate('/nurse/queue');
     }, 1500);
   };
 
