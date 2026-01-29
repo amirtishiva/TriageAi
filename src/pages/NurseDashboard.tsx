@@ -4,7 +4,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button';
 import { ESIBadge } from '@/components/triage/ESIBadge';
 import { PatientCard } from '@/components/triage/PatientCard';
-import { mockPatients, mockTriageCases, mockAlerts, getWaitingPatients, getInTriagePatients } from '@/data/mockData';
+import { useTriageCases } from '@/integrations/supabase/hooks/useTriageCases';
+import { useRealtimeAlerts } from '@/integrations/supabase/hooks/useRealtimeAlerts';
 import { 
   Activity, 
   Clock, 
@@ -14,10 +15,11 @@ import {
   UserPlus,
   Stethoscope,
   Bell,
-  ChevronRight
+  ChevronRight,
+  Loader2
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { ESILevel, Alert } from '@/types/triage';
+import { ESILevel, Patient, Alert, VitalSigns } from '@/types/triage';
 import {
   Dialog,
   DialogContent,
@@ -25,6 +27,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+import type { Database } from '@/integrations/supabase/types';
 
 interface StatCardProps {
   title: string;
@@ -111,29 +114,11 @@ function ActiveAlertBanner({ alerts, onViewAlerts }: ActiveAlertBannerProps) {
   );
 }
 
-function ESIDistribution() {
-  // Calculate actual distribution from mock data
-  const distribution = useMemo(() => {
-    const dist: Record<ESILevel, number> = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 };
-    
-    mockTriageCases.forEach(triageCase => {
-      const esiLevel = triageCase.validation?.validatedESI || triageCase.aiResult?.draftESI;
-      if (esiLevel) {
-        dist[esiLevel]++;
-      }
-    });
-    
-    // Also count patients without triage cases
-    mockPatients.forEach(patient => {
-      const hasCase = mockTriageCases.some(c => c.patient.id === patient.id);
-      if (!hasCase && patient.status === 'waiting') {
-        // Count as unassigned (don't add to ESI counts)
-      }
-    });
-    
-    return dist;
-  }, []);
+interface ESIDistributionProps {
+  distribution: Record<ESILevel, number>;
+}
 
+function ESIDistribution({ distribution }: ESIDistributionProps) {
   const total = Object.values(distribution).reduce((a, b) => a + b, 0);
 
   if (total === 0) {
@@ -192,23 +177,203 @@ function ESIDistribution() {
   );
 }
 
+// Default vitals for when real vitals aren't available
+const defaultVitals: VitalSigns = {
+  heartRate: 0,
+  bloodPressure: { systolic: 0, diastolic: 0 },
+  respiratoryRate: 0,
+  temperature: 0,
+  oxygenSaturation: 0,
+  painLevel: 0,
+  timestamp: new Date(),
+};
+
+// Convert DB patient status to UI status
+function mapStatus(dbStatus: string): Patient['status'] {
+  const statusMap: Record<string, Patient['status']> = {
+    'waiting': 'waiting',
+    'in_triage': 'in-triage',
+    'pending_validation': 'pending-validation',
+    'validated': 'validated',
+    'assigned': 'assigned',
+    'acknowledged': 'acknowledged',
+    'in_treatment': 'in-treatment',
+    'discharged': 'discharged',
+  };
+  return statusMap[dbStatus] || 'waiting';
+}
+
+// Helper to convert DB patient to UI format
+function mapPatient(dbPatient: Database['public']['Tables']['patients']['Row']): Patient {
+  const dob = new Date(dbPatient.date_of_birth);
+  const today = new Date();
+  const age = today.getFullYear() - dob.getFullYear();
+  
+  return {
+    id: dbPatient.id,
+    mrn: dbPatient.mrn,
+    firstName: dbPatient.first_name,
+    lastName: dbPatient.last_name,
+    dateOfBirth: dob,
+    age,
+    gender: dbPatient.gender as 'male' | 'female' | 'other',
+    chiefComplaint: dbPatient.chief_complaint,
+    arrivalTime: new Date(dbPatient.arrival_time),
+    status: mapStatus(dbPatient.status),
+    isReturning: dbPatient.is_returning,
+    vitals: defaultVitals,
+    allergies: dbPatient.allergies || [],
+    medicalHistory: dbPatient.medical_history || [],
+    medications: dbPatient.medications || [],
+  };
+}
+
 export default function NurseDashboard() {
   const navigate = useNavigate();
-  const waitingPatients = getWaitingPatients();
-  const inTriagePatients = getInTriagePatients();
   const [currentTime, setCurrentTime] = useState(new Date());
   const [showAlertsDialog, setShowAlertsDialog] = useState(false);
+  
+  // Fetch triage cases with patients
+  const { data: triageCases, isLoading } = useTriageCases();
+  
+  // Get real-time alerts
+  const { alerts: realtimeAlerts } = useRealtimeAlerts();
 
-  const criticalAlerts = mockAlerts.filter(a => a.esiLevel <= 2 && !a.acknowledgedAt);
-  const criticalCasesCount = mockTriageCases.filter(c => {
-    const esi = c.validation?.validatedESI || c.aiResult?.draftESI;
-    return esi && esi <= 2;
-  }).length;
+  // Calculate stats from real data
+  const { waitingPatients, inTriagePatients, esiDistribution, criticalCasesCount, avgWaitTime } = useMemo(() => {
+    if (!triageCases) {
+      return {
+        waitingPatients: [],
+        inTriagePatients: [],
+        esiDistribution: { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 } as Record<ESILevel, number>,
+        criticalCasesCount: 0,
+        avgWaitTime: 0,
+      };
+    }
+
+    const waiting: { patient: Patient; esiLevel?: ESILevel }[] = [];
+    const inTriage: { patient: Patient; esiLevel?: ESILevel }[] = [];
+    const dist: Record<ESILevel, number> = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 };
+    let critical = 0;
+    let totalWaitMs = 0;
+    let waitCount = 0;
+
+    for (const tc of triageCases) {
+      if (!tc.patients) continue;
+      
+      const patient = mapPatient(tc.patients);
+      const esiStr = tc.validated_esi || tc.ai_draft_esi;
+      const esiNum = esiStr ? (Number(esiStr) as ESILevel) : undefined;
+      
+      if (esiNum && esiNum >= 1 && esiNum <= 5) {
+        dist[esiNum]++;
+        if (esiNum <= 2) critical++;
+      }
+
+      const tcStatus = mapStatus(tc.status);
+      if (tcStatus === 'waiting') {
+        waiting.push({ patient, esiLevel: esiNum });
+        const waitMs = Date.now() - new Date(tc.created_at).getTime();
+        totalWaitMs += waitMs;
+        waitCount++;
+      } else if (tcStatus === 'in-triage' || tcStatus === 'pending-validation') {
+        inTriage.push({ patient, esiLevel: esiNum });
+      }
+    }
+
+    return {
+      waitingPatients: waiting,
+      inTriagePatients: inTriage,
+      esiDistribution: dist,
+      criticalCasesCount: critical,
+      avgWaitTime: waitCount > 0 ? Math.round(totalWaitMs / waitCount / 60000) : 0,
+    };
+  }, [triageCases]);
+
+  // Build alerts for display
+  const displayAlerts: Alert[] = useMemo(() => {
+    const alertList: Alert[] = [];
+    
+    // Add realtime alerts (only escalations with proper payload)
+    if (realtimeAlerts && Array.isArray(realtimeAlerts)) {
+      for (const a of realtimeAlerts) {
+        if (a.type === 'escalation') {
+          const payload = a.payload as {
+            triageCaseId: string;
+            patientId: string;
+            esiLevel: string;
+            escalationLevel: number;
+            assignedTo: string;
+            assignedRole: string;
+            patient?: {
+              firstName?: string;
+              lastName?: string;
+              chiefComplaint?: string;
+            };
+          };
+          const esiNum = Number(payload.esiLevel) as ESILevel;
+          alertList.push({
+            id: `rt-${payload.triageCaseId}`,
+            caseId: payload.triageCaseId,
+            type: 'escalation',
+            message: `ESI ${payload.esiLevel} case escalated to ${payload.assignedRole}`,
+            esiLevel: esiNum,
+            patient: {
+              id: payload.patientId,
+              mrn: '',
+              firstName: payload.patient?.firstName || 'Unknown',
+              lastName: payload.patient?.lastName || 'Patient',
+              dateOfBirth: new Date(),
+              age: 0,
+              gender: 'other',
+              chiefComplaint: payload.patient?.chiefComplaint || '',
+              arrivalTime: new Date(),
+              status: 'waiting',
+              isReturning: false,
+              vitals: defaultVitals,
+            },
+            createdAt: new Date(),
+          });
+        }
+      }
+    }
+    
+    // Add critical cases as alerts
+    if (triageCases) {
+      for (const tc of triageCases) {
+        if (!tc.patients) continue;
+        const esi = tc.validated_esi || tc.ai_draft_esi;
+        const esiNum = esi ? Number(esi) as ESILevel : undefined;
+        if (esiNum && esiNum <= 2 && !tc.acknowledged_at) {
+          const patient = mapPatient(tc.patients);
+          alertList.push({
+            id: tc.id,
+            caseId: tc.id,
+            type: 'new-case',
+            message: `${patient.chiefComplaint} - requires immediate attention`,
+            esiLevel: esiNum,
+            patient,
+            createdAt: new Date(tc.created_at),
+          });
+        }
+      }
+    }
+
+    return alertList;
+  }, [realtimeAlerts, triageCases]);
 
   useEffect(() => {
     const timer = setInterval(() => setCurrentTime(new Date()), 1000);
     return () => clearInterval(timer);
   }, []);
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6 animate-fade-in-up">
@@ -235,7 +400,7 @@ export default function NurseDashboard() {
 
       {/* Active Alerts */}
       <ActiveAlertBanner 
-        alerts={mockAlerts} 
+        alerts={displayAlerts} 
         onViewAlerts={() => setShowAlertsDialog(true)} 
       />
 
@@ -255,10 +420,10 @@ export default function NurseDashboard() {
         />
         <StatCard
           title="Avg Wait Time"
-          value="18 min"
+          value={`${avgWaitTime} min`}
           subtitle="Target: < 15 min"
           icon={<Clock className="h-5 w-5" />}
-          variant="warning"
+          variant={avgWaitTime > 15 ? 'warning' : 'default'}
         />
         <StatCard
           title="Critical Cases"
@@ -289,10 +454,11 @@ export default function NurseDashboard() {
             </Card>
           ) : (
             <div className="space-y-3">
-              {waitingPatients.map((patient) => (
+              {waitingPatients.slice(0, 5).map(({ patient, esiLevel }) => (
                 <PatientCard
                   key={patient.id}
                   patient={patient}
+                  esiLevel={esiLevel}
                   showActions
                   actionLabel="Start Triage"
                   onAction={() => navigate(`/nurse/triage/${patient.id}`)}
@@ -306,10 +472,11 @@ export default function NurseDashboard() {
             <>
               <h2 className="text-lg font-semibold mt-6">Currently in Triage</h2>
               <div className="space-y-3">
-                {inTriagePatients.map((patient) => (
+                {inTriagePatients.map(({ patient, esiLevel }) => (
                   <PatientCard
                     key={patient.id}
                     patient={patient}
+                    esiLevel={esiLevel}
                     showActions
                     actionLabel="Continue"
                     onAction={() => navigate(`/nurse/triage/${patient.id}`)}
@@ -322,7 +489,7 @@ export default function NurseDashboard() {
 
         {/* Sidebar */}
         <div className="space-y-4">
-          <ESIDistribution />
+          <ESIDistribution distribution={esiDistribution} />
 
           {/* Quick Actions */}
           <Card className="clinical-card">
@@ -373,12 +540,12 @@ export default function NurseDashboard() {
           </DialogHeader>
           
           <div className="space-y-3 py-4">
-            {criticalAlerts.length === 0 ? (
+            {displayAlerts.filter(a => a.esiLevel <= 2).length === 0 ? (
               <p className="text-center text-muted-foreground py-8">
                 No pending critical alerts
               </p>
             ) : (
-              criticalAlerts.map((alert) => (
+              displayAlerts.filter(a => a.esiLevel <= 2).map((alert) => (
                 <div 
                   key={alert.id}
                   className="p-4 rounded-lg border border-esi-1/30 bg-esi-1-bg"

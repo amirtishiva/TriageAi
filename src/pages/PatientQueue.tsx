@@ -1,44 +1,127 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { PatientCard } from '@/components/triage/PatientCard';
-import { mockPatients, mockTriageCases } from '@/data/mockData';
-import { ESILevel } from '@/types/triage';
-import { Search, Users, Filter, Clock, UserPlus } from 'lucide-react';
-import { cn } from '@/lib/utils';
+import { useTriageCases } from '@/integrations/supabase/hooks/useTriageCases';
+import { ESILevel, Patient, VitalSigns } from '@/types/triage';
+import { Search, Users, Filter, Clock, UserPlus, Loader2 } from 'lucide-react';
+import type { Database } from '@/integrations/supabase/types';
+
+// Default vitals for when real vitals aren't available
+const defaultVitals: VitalSigns = {
+  heartRate: 0,
+  bloodPressure: { systolic: 0, diastolic: 0 },
+  respiratoryRate: 0,
+  temperature: 0,
+  oxygenSaturation: 0,
+  painLevel: 0,
+  timestamp: new Date(),
+};
+
+// Convert DB patient status to UI status
+function mapStatus(dbStatus: string): Patient['status'] {
+  const statusMap: Record<string, Patient['status']> = {
+    'waiting': 'waiting',
+    'in_triage': 'in-triage',
+    'pending_validation': 'pending-validation',
+    'validated': 'validated',
+    'assigned': 'assigned',
+    'acknowledged': 'acknowledged',
+    'in_treatment': 'in-treatment',
+    'discharged': 'discharged',
+  };
+  return statusMap[dbStatus] || 'waiting';
+}
+
+// Helper to convert DB patient to UI format
+function mapPatient(dbPatient: Database['public']['Tables']['patients']['Row']): Patient {
+  const dob = new Date(dbPatient.date_of_birth);
+  const today = new Date();
+  const age = today.getFullYear() - dob.getFullYear();
+  
+  return {
+    id: dbPatient.id,
+    mrn: dbPatient.mrn,
+    firstName: dbPatient.first_name,
+    lastName: dbPatient.last_name,
+    dateOfBirth: dob,
+    age,
+    gender: dbPatient.gender as 'male' | 'female' | 'other',
+    chiefComplaint: dbPatient.chief_complaint,
+    arrivalTime: new Date(dbPatient.arrival_time),
+    status: mapStatus(dbPatient.status),
+    isReturning: dbPatient.is_returning,
+    vitals: defaultVitals,
+    allergies: dbPatient.allergies || [],
+    medicalHistory: dbPatient.medical_history || [],
+    medications: dbPatient.medications || [],
+  };
+}
 
 export default function PatientQueue() {
   const navigate = useNavigate();
   const [searchQuery, setSearchQuery] = useState('');
-  const [statusFilter, setStatusFilter] = useState<'all' | 'waiting' | 'in-triage' | 'validated'>('all');
+  const [statusFilter, setStatusFilter] = useState<'all' | 'waiting' | 'in_triage' | 'validated'>('all');
 
-  // Get all patients with their ESI levels from triage cases
-  const patientsWithESI = mockPatients.map(patient => {
-    const triageCase = mockTriageCases.find(c => c.patient.id === patient.id);
-    return {
-      patient,
-      esiLevel: triageCase?.validation?.validatedESI || triageCase?.aiResult?.draftESI,
-    };
-  });
+  // Fetch triage cases with real-time updates
+  const { data: triageCases, isLoading } = useTriageCases();
 
-  const filteredPatients = patientsWithESI
-    .filter(({ patient }) => {
-      if (statusFilter === 'all') return true;
-      return patient.status === statusFilter;
-    })
-    .filter(({ patient }) => {
-      if (!searchQuery) return true;
-      const name = `${patient.firstName} ${patient.lastName}`.toLowerCase();
-      return name.includes(searchQuery.toLowerCase()) || 
-             patient.mrn.toLowerCase().includes(searchQuery.toLowerCase());
-    });
+  // Transform and filter data
+  const { patientsWithESI, waitingCount, inTriageCount, validatedCount } = useMemo(() => {
+    if (!triageCases) {
+      return { patientsWithESI: [], waitingCount: 0, inTriageCount: 0, validatedCount: 0 };
+    }
 
-  // Stats counts
-  const waitingCount = patientsWithESI.filter(p => p.patient.status === 'waiting').length;
-  const inTriageCount = patientsWithESI.filter(p => p.patient.status === 'in-triage').length;
-  const validatedCount = patientsWithESI.filter(p => p.patient.status === 'validated').length;
+    const patients: { patient: Patient; esiLevel?: ESILevel }[] = [];
+    let waiting = 0;
+    let inTriage = 0;
+    let validated = 0;
+
+    for (const tc of triageCases) {
+      if (!tc.patients) continue;
+      
+      const patient = mapPatient(tc.patients);
+      const esiStr = tc.validated_esi || tc.ai_draft_esi;
+      const esiNum = esiStr ? (Number(esiStr) as ESILevel) : undefined;
+
+      patients.push({ patient, esiLevel: esiNum });
+
+      const status = mapStatus(tc.status);
+      if (status === 'waiting') waiting++;
+      else if (status === 'in-triage' || status === 'pending-validation') inTriage++;
+      else if (status === 'validated' || status === 'assigned' || status === 'acknowledged') validated++;
+    }
+
+    return { patientsWithESI: patients, waitingCount: waiting, inTriageCount: inTriage, validatedCount: validated };
+  }, [triageCases]);
+
+  // Apply filters
+  const filteredPatients = useMemo(() => {
+    return patientsWithESI
+      .filter(({ patient }) => {
+        if (statusFilter === 'all') return true;
+        if (statusFilter === 'waiting') return patient.status === 'waiting';
+        if (statusFilter === 'in_triage') return patient.status === 'in-triage';
+        if (statusFilter === 'validated') return patient.status === 'validated' || patient.status === 'assigned' || patient.status === 'acknowledged';
+        return true;
+      })
+      .filter(({ patient }) => {
+        if (!searchQuery) return true;
+        const name = `${patient.firstName} ${patient.lastName}`.toLowerCase();
+        return name.includes(searchQuery.toLowerCase()) || 
+               patient.mrn.toLowerCase().includes(searchQuery.toLowerCase());
+      });
+  }, [patientsWithESI, statusFilter, searchQuery]);
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6 animate-fade-in-up">
@@ -75,7 +158,7 @@ export default function PatientQueue() {
               <Filter className="h-4 w-4 text-muted-foreground" />
               <span className="text-sm text-muted-foreground">Status:</span>
               <div className="flex gap-1" role="group" aria-label="Filter by status">
-                {(['all', 'waiting', 'in-triage', 'validated'] as const).map((status) => (
+                {(['all', 'waiting', 'in_triage', 'validated'] as const).map((status) => (
                   <Button
                     key={status}
                     variant={statusFilter === status ? 'default' : 'outline'}
@@ -85,7 +168,7 @@ export default function PatientQueue() {
                   >
                     {status === 'all' ? 'All' : 
                      status === 'waiting' ? 'Waiting' :
-                     status === 'in-triage' ? 'In Triage' : 'Validated'}
+                     status === 'in_triage' ? 'In Triage' : 'Validated'}
                   </Button>
                 ))}
               </div>
