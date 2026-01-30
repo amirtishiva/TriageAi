@@ -25,7 +25,8 @@ import {
   Stethoscope,
   Users,
   LogOut,
-  Loader2
+  Loader2,
+  Activity
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/contexts/AuthContext';
@@ -62,12 +63,12 @@ function NurseSidebar() {
       <SidebarHeader className="border-b border-sidebar-border p-4">
         <div className="flex items-center gap-3">
           <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-clinical-cyan text-primary-foreground">
-            <Heart className="h-5 w-5" />
+            <Activity className="h-5 w-5" />
           </div>
           {!collapsed && (
             <div className="flex flex-col">
-              <span className="text-sm font-semibold text-sidebar-foreground">Nurse Station</span>
-              <span className="text-xs text-sidebar-foreground/60">Triage & Intake</span>
+              <span className="text-sm font-semibold text-sidebar-foreground">Triage AI</span>
+              <span className="text-xs text-sidebar-foreground/60">Nurse Station</span>
             </div>
           )}
         </div>

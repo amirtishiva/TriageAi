@@ -6,20 +6,20 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Slider } from '@/components/ui/slider';
-import { 
-  Select, 
-  SelectContent, 
-  SelectItem, 
-  SelectTrigger, 
-  SelectValue 
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue
 } from '@/components/ui/select';
 import { VitalsDisplay } from '@/components/triage/VitalsDisplay';
-import { 
-  ArrowLeft, 
-  User, 
-  Heart, 
-  FileUp, 
-  Search, 
+import {
+  ArrowLeft,
+  User,
+  Heart,
+  FileUp,
+  Search,
   CheckCircle2,
   AlertTriangle,
   Loader2,
@@ -40,6 +40,8 @@ interface UploadedFile {
   name: string;
   type: string;
   size: number;
+  file?: File;
+  publicUrl?: string;
 }
 
 interface FormErrors {
@@ -55,7 +57,7 @@ export default function PatientIntakePage() {
   const { user } = useAuth();
   const createPatient = useCreatePatient();
   const recordVitals = useRecordVitals();
-  
+
   const [step, setStep] = useState<'demographics' | 'vitals' | 'complaint' | 'documents'>('demographics');
   const [isSearching, setIsSearching] = useState(false);
   const [patientFound, setPatientFound] = useState(false);
@@ -64,7 +66,7 @@ export default function PatientIntakePage() {
   const [errors, setErrors] = useState<FormErrors>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [existingPatientId, setExistingPatientId] = useState<string | null>(null);
-  
+
   // Form state
   const [formData, setFormData] = useState({
     mrn: '',
@@ -91,7 +93,7 @@ export default function PatientIntakePage() {
   // Validation functions
   const validateDemographics = (): boolean => {
     const newErrors: FormErrors = {};
-    
+
     if (!formData.firstName.trim()) {
       newErrors.firstName = 'First name is required';
     }
@@ -104,18 +106,18 @@ export default function PatientIntakePage() {
     if (!formData.gender) {
       newErrors.gender = 'Gender is required';
     }
-    
+
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
 
   const validateComplaint = (): boolean => {
     const newErrors: FormErrors = {};
-    
+
     if (!formData.chiefComplaint.trim()) {
       newErrors.chiefComplaint = 'Chief complaint is required';
     }
-    
+
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
@@ -126,16 +128,16 @@ export default function PatientIntakePage() {
     setPatientNotFound(false);
     setPatientFound(false);
     setExistingPatientId(null);
-    
+
     try {
       const { data: patient, error } = await supabase
         .from('patients')
         .select('*')
         .eq('mrn', formData.mrn)
         .maybeSingle();
-      
+
       if (error) throw error;
-      
+
       if (patient) {
         setPatientFound(true);
         setPatientNotFound(false);
@@ -166,14 +168,15 @@ export default function PatientIntakePage() {
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files) return;
-    
+
     const newFiles: UploadedFile[] = Array.from(files).map((file, i) => ({
       id: `file-${Date.now()}-${i}`,
       name: file.name,
       type: file.type,
       size: file.size,
+      file: file,
     }));
-    
+
     setUploadedFiles(prev => [...prev, ...newFiles]);
   };
 
@@ -211,14 +214,14 @@ export default function PatientIntakePage() {
     }
 
     setIsSubmitting(true);
-    
+
     try {
       let patientId = existingPatientId;
-      
+
       // Create new patient if not found by MRN
       if (!patientId) {
         const mrn = formData.mrn || generateMRN();
-        
+
         const newPatient = await createPatient.mutateAsync({
           mrn,
           first_name: formData.firstName,
@@ -232,7 +235,7 @@ export default function PatientIntakePage() {
           status: 'in_triage',
           is_returning: patientFound,
         });
-        
+
         patientId = newPatient.id;
       } else {
         // Update existing patient with new chief complaint
@@ -247,8 +250,8 @@ export default function PatientIntakePage() {
       }
 
       // Record vitals if any were entered
-      const hasAnyVital = vitals.heartRate > 0 || 
-        vitals.bloodPressure.systolic > 0 || 
+      const hasAnyVital = vitals.heartRate > 0 ||
+        vitals.bloodPressure.systolic > 0 ||
         vitals.bloodPressure.diastolic > 0 ||
         vitals.respiratoryRate > 0 ||
         vitals.temperature > 0 ||
@@ -281,7 +284,60 @@ export default function PatientIntakePage() {
         console.error('Error creating triage case:', triageError);
       }
 
-      toast.success('Patient registered successfully');
+      // Upload documents if any
+      for (const fileObj of uploadedFiles) {
+        if (!fileObj.file) continue;
+
+        const fileExt = fileObj.name.split('.').pop();
+        const filePath = `${patientId}/${Math.random().toString(36).substring(7)}.${fileExt}`;
+
+        const { error: uploadError } = await supabase.storage
+          .from('patient-documents')
+          .upload(filePath, fileObj.file);
+
+        if (uploadError) {
+          console.error('Error uploading file:', uploadError);
+          toast.error(`Failed to upload ${fileObj.name}`);
+          continue;
+        }
+
+        const { data: { publicUrl } } = supabase.storage
+          .from('patient-documents')
+          .getPublicUrl(filePath);
+
+        // Save metadata
+        const { data: docRecord, error: docError } = await supabase
+          .from('patient_documents')
+          .insert({
+            patient_id: patientId,
+            file_path: filePath,
+            file_type: fileObj.type,
+            file_size: fileObj.size,
+            uploaded_by: user.id
+          })
+          .select('id')
+          .single();
+
+        if (docError) {
+          console.error('Database error saving doc:', docError);
+          continue;
+        }
+
+        // Trigger AI Analysis
+        if (docRecord) {
+          toast.info(`Analyzing ${fileObj.name} with AI...`);
+          await supabase.functions.invoke('analyze-document', {
+            body: {
+              patientId,
+              fileUrl: publicUrl,
+              fileType: fileObj.type,
+              documentId: docRecord.id
+            }
+          });
+        }
+      }
+
+      toast.success('Patient registered and documents processed');
       navigate(`/nurse/triage/${patientId}`);
     } catch (error) {
       console.error('Error creating patient:', error);
@@ -301,8 +357,8 @@ export default function PatientIntakePage() {
   const currentStepIndex = steps.findIndex(s => s.id === step);
 
   // Check if any vital has been entered
-  const hasAnyVital = vitals.heartRate > 0 || 
-    vitals.bloodPressure.systolic > 0 || 
+  const hasAnyVital = vitals.heartRate > 0 ||
+    vitals.bloodPressure.systolic > 0 ||
     vitals.bloodPressure.diastolic > 0 ||
     vitals.respiratoryRate > 0 ||
     vitals.temperature > 0 ||
@@ -313,9 +369,9 @@ export default function PatientIntakePage() {
     <div className="max-w-4xl mx-auto space-y-6 animate-fade-in-up">
       {/* Header */}
       <div className="flex items-center gap-4">
-        <Button 
-          variant="ghost" 
-          size="icon" 
+        <Button
+          variant="ghost"
+          size="icon"
           onClick={() => navigate(-1)}
           aria-label="Go back"
         >
@@ -330,15 +386,15 @@ export default function PatientIntakePage() {
       {/* Progress Steps */}
       <div className="flex items-center justify-between relative">
         <div className="absolute top-5 left-0 right-0 h-0.5 bg-muted -z-10" />
-        <div 
+        <div
           className="absolute top-5 left-0 h-0.5 bg-primary -z-10 transition-all duration-500"
           style={{ width: `${(currentStepIndex / (steps.length - 1)) * 100}%` }}
         />
-        
+
         {steps.map((s, i) => {
           const isActive = s.id === step;
           const isComplete = i < currentStepIndex;
-          
+
           return (
             <button
               key={s.id}
@@ -393,8 +449,8 @@ export default function PatientIntakePage() {
                     }}
                     className="max-w-xs"
                   />
-                  <Button 
-                    variant="secondary" 
+                  <Button
+                    variant="secondary"
                     onClick={handleMRNSearch}
                     disabled={isSearching || !formData.mrn}
                   >
@@ -487,14 +543,14 @@ export default function PatientIntakePage() {
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="gender">Gender *</Label>
-                  <Select 
-                    value={formData.gender} 
+                  <Select
+                    value={formData.gender}
                     onValueChange={(v) => {
                       setFormData(prev => ({ ...prev, gender: v }));
                       if (errors.gender) setErrors(prev => ({ ...prev, gender: undefined }));
                     }}
                   >
-                    <SelectTrigger 
+                    <SelectTrigger
                       id="gender"
                       className={cn(errors.gender && "border-destructive")}
                       aria-invalid={!!errors.gender}
@@ -558,8 +614,8 @@ export default function PatientIntakePage() {
                     id="systolic"
                     type="number"
                     value={vitals.bloodPressure.systolic || ''}
-                    onChange={(e) => setVitals(prev => ({ 
-                      ...prev, 
+                    onChange={(e) => setVitals(prev => ({
+                      ...prev,
                       bloodPressure: { ...prev.bloodPressure, systolic: +e.target.value }
                     }))}
                     placeholder="120"
@@ -572,8 +628,8 @@ export default function PatientIntakePage() {
                     id="diastolic"
                     type="number"
                     value={vitals.bloodPressure.diastolic || ''}
-                    onChange={(e) => setVitals(prev => ({ 
-                      ...prev, 
+                    onChange={(e) => setVitals(prev => ({
+                      ...prev,
                       bloodPressure: { ...prev.bloodPressure, diastolic: +e.target.value }
                     }))}
                     placeholder="80"
@@ -752,8 +808,8 @@ export default function PatientIntakePage() {
                   <Label>Uploaded Documents</Label>
                   <div className="space-y-2">
                     {uploadedFiles.map((file) => (
-                      <div 
-                        key={file.id} 
+                      <div
+                        key={file.id}
                         className="flex items-center justify-between p-3 bg-muted/50 rounded-lg"
                       >
                         <div className="flex items-center gap-3">
@@ -763,9 +819,9 @@ export default function PatientIntakePage() {
                             {(file.size / 1024).toFixed(1)} KB
                           </span>
                         </div>
-                        <Button 
-                          variant="ghost" 
-                          size="icon" 
+                        <Button
+                          variant="ghost"
+                          size="icon"
                           className="h-8 w-8"
                           onClick={() => removeFile(file.id)}
                           aria-label={`Remove ${file.name}`}
@@ -787,9 +843,9 @@ export default function PatientIntakePage() {
                 <Button variant="outline" onClick={() => setStep('complaint')}>
                   Back
                 </Button>
-                <Button 
-                  onClick={handleStartTriage} 
-                  size="lg" 
+                <Button
+                  onClick={handleStartTriage}
+                  size="lg"
                   className="gap-2"
                   disabled={isSubmitting}
                 >

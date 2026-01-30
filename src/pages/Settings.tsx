@@ -7,10 +7,10 @@ import { Input } from '@/components/ui/input';
 import { Separator } from '@/components/ui/separator';
 import { Badge } from '@/components/ui/badge';
 import { usePhysicianSettings } from '@/integrations/supabase/hooks/usePhysicianSettings';
-import { 
-  Bell, 
-  Clock, 
-  Shield, 
+import {
+  Bell,
+  Clock,
+  Shield,
   Server,
   CheckCircle2,
   AlertTriangle,
@@ -29,7 +29,7 @@ export default function Settings() {
     setIsSaving(true);
     const success = await saveSettings();
     setIsSaving(false);
-    
+
     if (success) {
       toast.success('Settings saved successfully');
     } else {
@@ -89,15 +89,15 @@ export default function Settings() {
                 Send immediate push notifications for critical cases
               </p>
             </div>
-            <Switch 
+            <Switch
               id="push-alerts"
               checked={settings.pushAlertsEnabled}
               onCheckedChange={(checked) => updateSetting('pushAlertsEnabled', checked)}
             />
           </div>
-          
+
           <Separator />
-          
+
           <div className="flex items-center justify-between">
             <div className="space-y-0.5">
               <Label htmlFor="silent-routing">ESI Level 3-5 Silent Routing</Label>
@@ -105,15 +105,15 @@ export default function Settings() {
                 Route lower acuity cases to track board without alerts
               </p>
             </div>
-            <Switch 
+            <Switch
               id="silent-routing"
               checked={settings.silentRoutingEnabled}
               onCheckedChange={(checked) => updateSetting('silentRoutingEnabled', checked)}
             />
           </div>
-          
+
           <Separator />
-          
+
           <div className="flex items-center justify-between">
             <div className="space-y-0.5">
               <Label htmlFor="sound-alerts">Sound Alerts</Label>
@@ -121,7 +121,7 @@ export default function Settings() {
                 Play audio notification for critical alerts
               </p>
             </div>
-            <Switch 
+            <Switch
               id="sound-alerts"
               checked={settings.soundAlertsEnabled}
               onCheckedChange={(checked) => updateSetting('soundAlertsEnabled', checked)}
@@ -146,12 +146,12 @@ export default function Settings() {
             <div className="space-y-2">
               <Label htmlFor="esi1-timeout">ESI Level 1 Timeout</Label>
               <div className="flex items-center gap-2">
-                <Input 
+                <Input
                   id="esi1-timeout"
-                  type="number" 
+                  type="number"
                   value={settings.esi1Timeout}
                   onChange={(e) => updateSetting('esi1Timeout', +e.target.value)}
-                  className="w-20 font-vitals" 
+                  className="w-20 font-vitals"
                   min={1}
                   max={10}
                 />
@@ -161,12 +161,12 @@ export default function Settings() {
             <div className="space-y-2">
               <Label htmlFor="esi2-timeout">ESI Level 2 Timeout</Label>
               <div className="flex items-center gap-2">
-                <Input 
+                <Input
                   id="esi2-timeout"
-                  type="number" 
+                  type="number"
                   value={settings.esi2Timeout}
                   onChange={(e) => updateSetting('esi2Timeout', +e.target.value)}
-                  className="w-20 font-vitals" 
+                  className="w-20 font-vitals"
                   min={1}
                   max={15}
                 />
@@ -174,11 +174,11 @@ export default function Settings() {
               </div>
             </div>
           </div>
-          
+
           <div className="p-3 bg-muted/50 rounded-lg flex items-start gap-2">
             <Info className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
             <p className="text-sm text-muted-foreground">
-              Unacknowledged cases will automatically escalate to the next provider 
+              Unacknowledged cases will automatically escalate to the next provider
               in the chain after the timeout period expires.
             </p>
           </div>
@@ -204,15 +204,15 @@ export default function Settings() {
                 Allow AI to generate draft ESI recommendations
               </p>
             </div>
-            <Switch 
+            <Switch
               id="ai-drafting"
               checked={settings.aiDraftingEnabled}
               onCheckedChange={(checked) => updateSetting('aiDraftingEnabled', checked)}
             />
           </div>
-          
+
           <Separator />
-          
+
           <div className="flex items-center justify-between">
             <div className="space-y-0.5">
               <Label htmlFor="confidence-indicators">Show Confidence Indicators</Label>
@@ -220,15 +220,15 @@ export default function Settings() {
                 Display AI confidence levels and influencing factors
               </p>
             </div>
-            <Switch 
+            <Switch
               id="confidence-indicators"
               checked={settings.showConfidenceIndicators}
               onCheckedChange={(checked) => updateSetting('showConfidenceIndicators', checked)}
             />
           </div>
-          
+
           <Separator />
-          
+
           <div className="flex items-center justify-between">
             <div className="space-y-0.5">
               <Label htmlFor="sbar-summaries">Generate SBAR Summaries</Label>
@@ -236,7 +236,7 @@ export default function Settings() {
                 Automatically generate structured handoff summaries
               </p>
             </div>
-            <Switch 
+            <Switch
               id="sbar-summaries"
               checked={settings.generateSBARSummaries}
               onCheckedChange={(checked) => updateSetting('generateSBARSummaries', checked)}
@@ -246,7 +246,7 @@ export default function Settings() {
           <div className="p-3 bg-esi-2-bg border border-esi-2/20 rounded-lg flex items-start gap-2">
             <AlertTriangle className="h-4 w-4 text-esi-2 mt-0.5 shrink-0" />
             <p className="text-sm">
-              <strong>Human-in-the-loop required:</strong> AI cannot finalize triage decisions. 
+              <strong>Human-in-the-loop required:</strong> AI cannot finalize triage decisions.
               Nurse validation is mandatory for all cases.
             </p>
           </div>
@@ -270,12 +270,12 @@ export default function Settings() {
               <Database className="h-5 w-5 text-muted-foreground" />
               <div>
                 <p className="font-medium">Database</p>
-                <p className="text-xs text-muted-foreground">Lovable Cloud PostgreSQL</p>
+                <p className="text-xs text-muted-foreground">Triage AI Cloud PostgreSQL</p>
               </div>
             </div>
             <Badge className="bg-confidence-high">Connected</Badge>
           </div>
-          
+
           <div className="flex items-center justify-between p-3 bg-muted/30 rounded-lg">
             <div className="flex items-center gap-3">
               <Server className="h-5 w-5 text-muted-foreground" />
@@ -286,7 +286,7 @@ export default function Settings() {
             </div>
             <Badge className="bg-confidence-high">Active</Badge>
           </div>
-          
+
           <div className="flex items-center justify-between p-3 bg-muted/30 rounded-lg">
             <div className="flex items-center gap-3">
               <Shield className="h-5 w-5 text-muted-foreground" />
@@ -302,15 +302,15 @@ export default function Settings() {
 
       {/* Save Button */}
       <div className="flex justify-between">
-        <Button 
+        <Button
           variant="outline"
           onClick={handleReset}
         >
           <RotateCcw className="h-4 w-4 mr-2" />
           Reset to Defaults
         </Button>
-        <Button 
-          size="lg" 
+        <Button
+          size="lg"
           onClick={handleSave}
           disabled={isSaving || !hasChanges}
         >

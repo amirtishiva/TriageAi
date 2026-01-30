@@ -8,7 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
-import { Heart, Stethoscope, Shield, Eye, EyeOff, Loader2 } from 'lucide-react';
+import { Heart, Stethoscope, Shield, Eye, EyeOff, Loader2, Activity } from 'lucide-react';
 import { z } from 'zod';
 import type { Database } from '@/integrations/supabase/types';
 
@@ -39,7 +39,7 @@ export default function AuthPage() {
   const navigate = useNavigate();
   const { signIn, signUp, user, currentRole, loading: authLoading } = useAuth();
   const { toast } = useToast();
-  
+
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [role, setRole] = useState<AppRole>('nurse');
@@ -80,11 +80,11 @@ export default function AuthPage() {
 
   const handleSignIn = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     // Validate inputs
     const isEmailValid = validateEmail(email);
     const isPasswordValid = validatePassword(password);
-    
+
     if (!isEmailValid || !isPasswordValid) {
       return;
     }
@@ -112,11 +112,11 @@ export default function AuthPage() {
 
   const handleSignUp = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     // Validate inputs
     const isEmailValid = validateEmail(email);
     const isPasswordValid = validatePassword(password);
-    
+
     if (!isEmailValid || !isPasswordValid) {
       return;
     }
@@ -144,7 +144,7 @@ export default function AuthPage() {
 
   const handleForgotPassword = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (!validateEmail(email)) {
       return;
     }
@@ -195,9 +195,9 @@ export default function AuthPage() {
       <Card className="w-full max-w-md">
         <CardHeader className="text-center">
           <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-primary/10">
-            <Stethoscope className="h-6 w-6 text-primary" />
+            <Activity className="h-6 w-6 text-primary" />
           </div>
-          <CardTitle className="text-2xl">MedTriage AI</CardTitle>
+          <CardTitle className="text-2xl">Triage AI</CardTitle>
           <CardDescription>
             Clinical Decision Support System
           </CardDescription>

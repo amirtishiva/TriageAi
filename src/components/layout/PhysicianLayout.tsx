@@ -70,12 +70,12 @@ function PhysicianSidebar() {
       <SidebarHeader className="border-b border-sidebar-border p-4">
         <div className="flex items-center gap-3">
           <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-purple-600 text-white">
-            <Stethoscope className="h-5 w-5" />
+            <Activity className="h-5 w-5" />
           </div>
           {!collapsed && (
             <div className="flex flex-col">
-              <span className="text-sm font-semibold text-sidebar-foreground">Physician Workbench</span>
-              <span className="text-xs text-sidebar-foreground/60">Case Management</span>
+              <span className="text-sm font-semibold text-sidebar-foreground">Triage AI</span>
+              <span className="text-xs text-sidebar-foreground/60">Physician Workbench</span>
             </div>
           )}
         </div>
