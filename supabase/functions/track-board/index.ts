@@ -183,6 +183,8 @@ Deno.serve(async (req) => {
     const summary = {
       total: count || 0,
       byESI: {
+        1: processedCases.filter(c => c.esiLevel === 1).length,
+        2: processedCases.filter(c => c.esiLevel === 2).length,
         3: processedCases.filter(c => c.esiLevel === 3).length,
         4: processedCases.filter(c => c.esiLevel === 4).length,
         5: processedCases.filter(c => c.esiLevel === 5).length

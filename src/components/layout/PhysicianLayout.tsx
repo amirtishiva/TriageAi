@@ -1,9 +1,9 @@
 import { useState, useEffect } from 'react';
 import { Outlet, useLocation, useNavigate } from 'react-router-dom';
-import { 
-  SidebarProvider, 
-  Sidebar, 
-  SidebarContent, 
+import {
+  SidebarProvider,
+  Sidebar,
+  SidebarContent,
   SidebarHeader,
   SidebarMenu,
   SidebarMenuItem,
@@ -17,9 +17,9 @@ import {
 } from '@/components/ui/sidebar';
 import { NavLink } from '@/components/NavLink';
 import { Button } from '@/components/ui/button';
-import { 
-  Stethoscope, 
-  Bell, 
+import {
+  Stethoscope,
+  Bell,
   ClipboardList,
   Activity,
   FileText,
@@ -34,6 +34,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useCriticalAlerts } from '@/integrations/supabase/hooks/useCriticalAlerts';
 import { useRealtimeAlerts } from '@/integrations/supabase/hooks/useRealtimeAlerts';
 import { toast } from 'sonner';
+import { ShiftHandoffDialog } from '@/components/physician/ShiftHandoffDialog';
 
 const physicianNavItems = [
   { title: 'Track Board', url: '/physician', icon: ClipboardList },
@@ -90,13 +91,13 @@ function PhysicianSidebar() {
             <SidebarMenu>
               {physicianNavItems.map((item) => (
                 <SidebarMenuItem key={item.title}>
-                  <SidebarMenuButton 
-                    asChild 
+                  <SidebarMenuButton
+                    asChild
                     isActive={isActive(item.url)}
                     tooltip={item.title}
                   >
-                    <NavLink 
-                      to={item.url} 
+                    <NavLink
+                      to={item.url}
                       className="flex items-center gap-3 rounded-md px-3 py-2 text-sidebar-foreground hover:bg-sidebar-accent"
                       activeClassName="bg-purple-500/10 text-purple-400 font-medium border-l-2 border-purple-500"
                     >
@@ -119,13 +120,13 @@ function PhysicianSidebar() {
             <SidebarMenu>
               {systemNavItems.map((item) => (
                 <SidebarMenuItem key={item.title}>
-                  <SidebarMenuButton 
-                    asChild 
+                  <SidebarMenuButton
+                    asChild
                     isActive={isActive(item.url)}
                     tooltip={item.title}
                   >
-                    <NavLink 
-                      to={item.url} 
+                    <NavLink
+                      to={item.url}
                       className="flex items-center gap-3 rounded-md px-3 py-2 text-sidebar-foreground hover:bg-sidebar-accent"
                       activeClassName="bg-purple-500/10 text-purple-400 font-medium border-l-2 border-purple-500"
                     >
@@ -140,28 +141,29 @@ function PhysicianSidebar() {
         </SidebarGroup>
       </SidebarContent>
 
+
+
+      // ...
+
       <SidebarFooter className="border-t border-sidebar-border p-2">
         <SidebarMenu>
           <SidebarMenuItem>
-            <SidebarMenuButton 
-              asChild
-              tooltip="Switch Role"
-            >
-              <button 
-                onClick={() => navigate('/')}
-                className="flex items-center gap-3 rounded-md px-3 py-2 text-sidebar-foreground hover:bg-sidebar-accent w-full"
-              >
-                <ChevronLeft className="h-4 w-4 shrink-0" />
-                {!collapsed && <span className="text-sm">Switch Role</span>}
-              </button>
-            </SidebarMenuButton>
+            <ShiftHandoffDialog trigger={
+              <SidebarMenuButton tooltip="Shift Handoff">
+                <div className="flex items-center gap-3 rounded-md px-3 py-2 text-sidebar-foreground hover:bg-sidebar-accent w-full cursor-pointer">
+                  <ClipboardList className="h-4 w-4 shrink-0" />
+                  {!collapsed && <span className="text-sm">Shift Handoff</span>}
+                </div>
+              </SidebarMenuButton>
+            } />
           </SidebarMenuItem>
+
           <SidebarMenuItem>
-            <SidebarMenuButton 
+            <SidebarMenuButton
               asChild
               tooltip="Sign Out"
             >
-              <button 
+              <button
                 onClick={handleSignOut}
                 className="flex items-center gap-3 rounded-md px-3 py-2 text-sidebar-foreground hover:bg-destructive/10 hover:text-destructive w-full"
               >
@@ -176,17 +178,37 @@ function PhysicianSidebar() {
   );
 }
 
+import { NotificationPopover } from '@/components/layout/NotificationPopover';
+import { useSystemStatus } from '@/integrations/supabase/hooks/useSystemStatus';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
+
 function PhysicianHeader() {
   const { user, session } = useAuth();
   const { data: criticalData } = useCriticalAlerts({ session });
   const criticalCount = criticalData?.count || 0;
+  const status = useSystemStatus();
 
-  // Real-time alerts - hook handles toasts internally
-  useRealtimeAlerts(user?.id);
+  // Real-time alerts
+  const { alerts, dismissAlert } = useRealtimeAlerts(user?.id);
+
+  // Filter for critical alerts only (ESI 1-2)
+  const criticalAlerts = alerts?.filter(a => {
+    if (a.type === 'critical_case' || a.type === 'escalation') {
+      const payload = a.payload as any;
+      const level = Number(payload.esiLevel);
+      return level <= 2;
+    }
+    return false;
+  }) || [];
+  const alertCount = criticalAlerts.length;
 
   // Get user initials from email
-  const userInitials = user?.email 
-    ? user.email.substring(0, 2).toUpperCase() 
+  const userInitials = user?.email
+    ? user.email.substring(0, 2).toUpperCase()
     : 'DR';
 
   return (
@@ -194,8 +216,26 @@ function PhysicianHeader() {
       <div className="flex items-center gap-4">
         <SidebarTrigger className="text-muted-foreground hover:text-foreground" aria-label="Toggle sidebar" />
         <div className="hidden sm:flex items-center gap-2">
-          <div className="h-2 w-2 rounded-full bg-purple-500 animate-pulse" />
-          <h2 className="text-sm font-medium text-muted-foreground">Physician Workbench Active</h2>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <div className="flex items-center gap-2 cursor-help">
+                <div className={cn(
+                  "h-2 w-2 rounded-full animate-pulse",
+                  status.isOnline ? "bg-green-500" : "bg-red-500"
+                )} />
+                <h2 className="text-sm font-medium text-muted-foreground">
+                  {status.isOnline ? 'System Online' : 'System Offline'}
+                </h2>
+              </div>
+            </TooltipTrigger>
+            <TooltipContent>
+              <p className="text-xs font-semibold">System Status</p>
+              <div className="text-xs opacity-90">
+                <p>Realtime: {status.realtimeStatus}</p>
+                <p>Latency: {status.latency !== null ? `${status.latency}ms` : 'Checking...'}</p>
+              </div>
+            </TooltipContent>
+          </Tooltip>
         </div>
       </div>
 
@@ -208,17 +248,12 @@ function PhysicianHeader() {
           </div>
         )}
 
-        <button 
-          className="relative rounded-full p-2 hover:bg-muted transition-colors"
-          aria-label={`Notifications: ${criticalCount} critical alerts`}
-        >
-          <Bell className="h-5 w-5 text-muted-foreground" />
-          {criticalCount > 0 && (
-            <span className="absolute -right-0.5 -top-0.5 flex h-5 w-5 items-center justify-center rounded-full bg-esi-1 text-[10px] font-bold text-white animate-pulse">
-              {criticalCount}
-            </span>
-          )}
-        </button>
+        {/* Real-time Notifications */}
+        <NotificationPopover
+          alerts={criticalAlerts}
+          onDismiss={dismissAlert}
+          count={alertCount}
+        />
 
         <div className="flex items-center gap-2 rounded-full bg-purple-500/10 px-3 py-1.5 border border-purple-500/20">
           <div className="h-6 w-6 rounded-full bg-purple-600 flex items-center justify-center text-white text-xs font-medium">

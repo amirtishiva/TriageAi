@@ -36,11 +36,32 @@ function mapStatus(dbStatus: string): Patient['status'] {
 }
 
 // Helper to convert DB patient to UI format
-function mapPatient(dbPatient: Database['public']['Tables']['patients']['Row']): Patient {
+function mapPatient(
+  dbPatient: Database['public']['Tables']['patients']['Row'],
+  dbVitals?: Database['public']['Tables']['vital_signs']['Row'][]
+): Patient {
   const dob = new Date(dbPatient.date_of_birth);
   const today = new Date();
   const age = today.getFullYear() - dob.getFullYear();
-  
+
+  // Get latest vitals from DB or use defaults
+  const latestVital = dbVitals && dbVitals.length > 0
+    ? dbVitals.sort((a, b) => new Date(b.recorded_at).getTime() - new Date(a.recorded_at).getTime())[0]
+    : null;
+
+  const vitals: VitalSigns = latestVital ? {
+    heartRate: latestVital.heart_rate || 0,
+    bloodPressure: {
+      systolic: latestVital.systolic_bp || 0,
+      diastolic: latestVital.diastolic_bp || 0
+    },
+    respiratoryRate: latestVital.respiratory_rate || 0,
+    temperature: latestVital.temperature ? Number(latestVital.temperature) : 0,
+    oxygenSaturation: latestVital.oxygen_saturation || 0,
+    painLevel: latestVital.pain_level || 0,
+    timestamp: new Date(latestVital.recorded_at),
+  } : defaultVitals;
+
   return {
     id: dbPatient.id,
     mrn: dbPatient.mrn,
@@ -53,7 +74,7 @@ function mapPatient(dbPatient: Database['public']['Tables']['patients']['Row']):
     arrivalTime: new Date(dbPatient.arrival_time),
     status: mapStatus(dbPatient.status),
     isReturning: dbPatient.is_returning,
-    vitals: defaultVitals,
+    vitals,
     allergies: dbPatient.allergies || [],
     medicalHistory: dbPatient.medical_history || [],
     medications: dbPatient.medications || [],
@@ -81,8 +102,8 @@ export default function PatientQueue() {
 
     for (const tc of triageCases) {
       if (!tc.patients) continue;
-      
-      const patient = mapPatient(tc.patients);
+
+      const patient = mapPatient(tc.patients, (tc.patients as { vital_signs?: Database['public']['Tables']['vital_signs']['Row'][] }).vital_signs);
       const esiStr = tc.validated_esi || tc.ai_draft_esi;
       const esiNum = esiStr ? (Number(esiStr) as ESILevel) : undefined;
 
@@ -110,8 +131,8 @@ export default function PatientQueue() {
       .filter(({ patient }) => {
         if (!searchQuery) return true;
         const name = `${patient.firstName} ${patient.lastName}`.toLowerCase();
-        return name.includes(searchQuery.toLowerCase()) || 
-               patient.mrn.toLowerCase().includes(searchQuery.toLowerCase());
+        return name.includes(searchQuery.toLowerCase()) ||
+          patient.mrn.toLowerCase().includes(searchQuery.toLowerCase());
       });
   }, [patientsWithESI, statusFilter, searchQuery]);
 
@@ -166,9 +187,9 @@ export default function PatientQueue() {
                     onClick={() => setStatusFilter(status)}
                     aria-pressed={statusFilter === status}
                   >
-                    {status === 'all' ? 'All' : 
-                     status === 'waiting' ? 'Waiting' :
-                     status === 'in_triage' ? 'In Triage' : 'Validated'}
+                    {status === 'all' ? 'All' :
+                      status === 'waiting' ? 'Waiting' :
+                        status === 'in_triage' ? 'In Triage' : 'Validated'}
                   </Button>
                 ))}
               </div>
@@ -221,14 +242,14 @@ export default function PatientQueue() {
             <CardContent className="p-8 text-center">
               <Users className="h-12 w-12 text-muted-foreground mx-auto mb-3" />
               <p className="text-muted-foreground">
-                {searchQuery || statusFilter !== 'all' 
+                {searchQuery || statusFilter !== 'all'
                   ? 'No patients match your search or filters. Try adjusting your criteria.'
                   : 'No patients in the queue'}
               </p>
               {(searchQuery || statusFilter !== 'all') && (
-                <Button 
-                  variant="outline" 
-                  size="sm" 
+                <Button
+                  variant="outline"
+                  size="sm"
                   className="mt-4"
                   onClick={() => {
                     setSearchQuery('');
@@ -250,7 +271,7 @@ export default function PatientQueue() {
               showActions
               actionLabel={
                 patient.status === 'waiting' ? 'Start Triage' :
-                patient.status === 'in-triage' ? 'Continue Triage' : 'View Details'
+                  patient.status === 'in-triage' ? 'Continue Triage' : 'View Details'
               }
               onAction={() => navigate(`/triage/${patient.id}`)}
             />

@@ -1,4 +1,8 @@
 import { useState, useEffect, useCallback } from 'react';
+import { supabase } from '@/integrations/supabase/client';
+import { useAuth } from '@/contexts/AuthContext';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { toast } from 'sonner';
 
 export interface PhysicianSettings {
   pushAlertsEnabled: boolean;
@@ -22,58 +26,126 @@ const DEFAULT_SETTINGS: PhysicianSettings = {
   generateSBARSummaries: true,
 };
 
-const STORAGE_KEY = 'physician_settings';
+// Functions to map between snake_case (DB) and camelCase (App)
+const mapToApp = (dbSettings: any): PhysicianSettings => ({
+  pushAlertsEnabled: dbSettings.push_alerts_enabled ?? DEFAULT_SETTINGS.pushAlertsEnabled,
+  silentRoutingEnabled: dbSettings.silent_routing_enabled ?? DEFAULT_SETTINGS.silentRoutingEnabled,
+  soundAlertsEnabled: dbSettings.sound_alerts_enabled ?? DEFAULT_SETTINGS.soundAlertsEnabled,
+  esi1Timeout: dbSettings.esi1_timeout ?? DEFAULT_SETTINGS.esi1Timeout,
+  esi2Timeout: dbSettings.esi2_timeout ?? DEFAULT_SETTINGS.esi2Timeout,
+  aiDraftingEnabled: dbSettings.ai_drafting_enabled ?? DEFAULT_SETTINGS.aiDraftingEnabled,
+  showConfidenceIndicators: dbSettings.show_confidence_indicators ?? DEFAULT_SETTINGS.showConfidenceIndicators,
+  generateSBARSummaries: dbSettings.generate_sbar_summaries ?? DEFAULT_SETTINGS.generateSBARSummaries,
+});
+
+const mapToDb = (settings: PhysicianSettings, userId: string) => ({
+  user_id: userId,
+  push_alerts_enabled: settings.pushAlertsEnabled,
+  silent_routing_enabled: settings.silentRoutingEnabled,
+  sound_alerts_enabled: settings.soundAlertsEnabled,
+  esi1_timeout: settings.esi1Timeout,
+  esi2_timeout: settings.esi2Timeout,
+  ai_drafting_enabled: settings.aiDraftingEnabled,
+  show_confidence_indicators: settings.showConfidenceIndicators,
+  generate_sbar_summaries: settings.generateSBARSummaries,
+});
 
 export function usePhysicianSettings() {
-  const [settings, setSettings] = useState<PhysicianSettings>(() => {
-    try {
-      const stored = localStorage.getItem(STORAGE_KEY);
-      if (stored) {
-        return { ...DEFAULT_SETTINGS, ...JSON.parse(stored) };
+  const { user } = useAuth();
+  const queryClient = useQueryClient();
+  const [localSettings, setLocalSettings] = useState<PhysicianSettings>(DEFAULT_SETTINGS);
+  const [hasChanges, setHasChanges] = useState(false);
+
+  // Fetch settings
+  const { data: dbSettings, isSuccess } = useQuery({
+    queryKey: ['physician-settings', user?.id],
+    queryFn: async () => {
+      if (!user?.id) return null;
+
+      const { data, error } = await (supabase
+        .from('physician_settings' as any)
+        .select('*')
+        .eq('user_id', user.id)
+        .single()) as any;
+
+      if (error && error.code !== 'PGRST116') { // PGRST116 is not found
+        console.error('Error fetching settings:', error);
       }
-    } catch (e) {
-      console.error('Failed to load settings:', e);
-    }
-    return DEFAULT_SETTINGS;
+
+      return data;
+    },
+    enabled: !!user?.id,
   });
 
-  const [hasChanges, setHasChanges] = useState(false);
-  const [initialSettings, setInitialSettings] = useState<PhysicianSettings>(settings);
-
-  // Track changes
+  // Init local state when DB data arrives
   useEffect(() => {
-    const changed = JSON.stringify(settings) !== JSON.stringify(initialSettings);
-    setHasChanges(changed);
-  }, [settings, initialSettings]);
+    if (isSuccess && dbSettings) {
+      const mapped = mapToApp(dbSettings);
+      setLocalSettings(mapped);
+    } else if (isSuccess && !dbSettings) {
+      // No settings found, use defaults
+      setLocalSettings(DEFAULT_SETTINGS);
+    }
+  }, [dbSettings, isSuccess]);
+
+  // Check for changes
+  useEffect(() => {
+    if (!dbSettings) {
+      setHasChanges(JSON.stringify(localSettings) !== JSON.stringify(DEFAULT_SETTINGS));
+    } else {
+      const original = mapToApp(dbSettings);
+      setHasChanges(JSON.stringify(localSettings) !== JSON.stringify(original));
+    }
+  }, [localSettings, dbSettings]);
+
+  // Mutation to save settings
+  const mutation = useMutation({
+    mutationFn: async (newSettings: PhysicianSettings) => {
+      if (!user?.id) throw new Error('No user');
+
+      const dbPayload = mapToDb(newSettings, user.id);
+
+      const { error } = await (supabase
+        .from('physician_settings' as any)
+        .upsert(dbPayload)) as any;
+
+      if (error) throw error;
+      return newSettings;
+    },
+    onSuccess: (data) => {
+      queryClient.setQueryData(['physician-settings', user?.id], mapToDb(data, user!.id)); // cache invalidation helper
+      setHasChanges(false);
+      // toast handled in component
+    },
+    onError: (error) => {
+      console.error('Failed to save settings:', error);
+      toast.error('Failed to save settings');
+    }
+  });
 
   const updateSetting = useCallback(<K extends keyof PhysicianSettings>(
     key: K,
     value: PhysicianSettings[K]
   ) => {
-    setSettings(prev => ({ ...prev, [key]: value }));
+    setLocalSettings(prev => ({ ...prev, [key]: value }));
   }, []);
 
   const saveSettings = useCallback(async () => {
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(settings));
-      setInitialSettings(settings);
-      setHasChanges(false);
+      await mutation.mutateAsync(localSettings);
       return true;
-    } catch (e) {
-      console.error('Failed to save settings:', e);
+    } catch {
       return false;
     }
-  }, [settings]);
+  }, [mutation, localSettings]);
 
   const resetSettings = useCallback(() => {
-    setSettings(DEFAULT_SETTINGS);
-    localStorage.removeItem(STORAGE_KEY);
-    setInitialSettings(DEFAULT_SETTINGS);
-    setHasChanges(false);
+    setLocalSettings(DEFAULT_SETTINGS);
+    // Don't auto-save on reset, let user click save
   }, []);
 
   return {
-    settings,
+    settings: localSettings,
     updateSetting,
     saveSettings,
     resetSettings,

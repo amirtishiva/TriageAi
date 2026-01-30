@@ -1,9 +1,9 @@
-import { useState, useEffect } from 'react';
+import { useEffect } from 'react';
 import { Outlet, useLocation, useNavigate } from 'react-router-dom';
-import { 
-  SidebarProvider, 
-  Sidebar, 
-  SidebarContent, 
+import {
+  SidebarProvider,
+  Sidebar,
+  SidebarContent,
   SidebarHeader,
   SidebarMenu,
   SidebarMenuItem,
@@ -17,19 +17,19 @@ import {
 } from '@/components/ui/sidebar';
 import { NavLink } from '@/components/NavLink';
 import { Button } from '@/components/ui/button';
-import { 
-  Heart, 
-  Bell, 
+import {
+  Heart,
+  Bell,
   LayoutDashboard,
   UserPlus,
   Stethoscope,
   Users,
   LogOut,
-  ChevronLeft,
   Loader2
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/contexts/AuthContext';
+import { useRealtimeAlerts } from '@/integrations/supabase/hooks/useRealtimeAlerts';
 
 const nurseNavItems = [
   { title: 'Dashboard', url: '/nurse', icon: LayoutDashboard },
@@ -82,13 +82,13 @@ function NurseSidebar() {
             <SidebarMenu>
               {nurseNavItems.map((item) => (
                 <SidebarMenuItem key={item.title}>
-                  <SidebarMenuButton 
-                    asChild 
+                  <SidebarMenuButton
+                    asChild
                     isActive={isActive(item.url)}
                     tooltip={item.title}
                   >
-                    <NavLink 
-                      to={item.url} 
+                    <NavLink
+                      to={item.url}
                       className="flex items-center gap-3 rounded-md px-3 py-2 text-sidebar-foreground hover:bg-sidebar-accent"
                       activeClassName="bg-clinical-cyan/10 text-clinical-cyan font-medium border-l-2 border-clinical-cyan"
                     >
@@ -106,25 +106,11 @@ function NurseSidebar() {
       <SidebarFooter className="border-t border-sidebar-border p-2">
         <SidebarMenu>
           <SidebarMenuItem>
-            <SidebarMenuButton 
-              asChild
-              tooltip="Switch Role"
-            >
-              <button 
-                onClick={() => navigate('/')}
-                className="flex items-center gap-3 rounded-md px-3 py-2 text-sidebar-foreground hover:bg-sidebar-accent w-full"
-              >
-                <ChevronLeft className="h-4 w-4 shrink-0" />
-                {!collapsed && <span className="text-sm">Switch Role</span>}
-              </button>
-            </SidebarMenuButton>
-          </SidebarMenuItem>
-          <SidebarMenuItem>
-            <SidebarMenuButton 
+            <SidebarMenuButton
               asChild
               tooltip="Sign Out"
             >
-              <button 
+              <button
                 onClick={handleSignOut}
                 className="flex items-center gap-3 rounded-md px-3 py-2 text-sidebar-foreground hover:bg-destructive/10 hover:text-destructive w-full"
               >
@@ -140,12 +126,22 @@ function NurseSidebar() {
 }
 
 function NurseHeader() {
-  const [alertCount] = useState(2);
   const { user, zone } = useAuth();
+  const { alerts } = useRealtimeAlerts();
+
+  // Count pending critical alerts (ESI 1-2)
+  const alertCount = alerts?.filter(a => {
+    if (a.type === 'escalation') {
+      const payload = a.payload as { esiLevel?: string };
+      const esiNum = Number(payload?.esiLevel || 5);
+      return esiNum <= 2;
+    }
+    return false;
+  }).length || 0;
 
   // Get user initials from email
-  const userInitials = user?.email 
-    ? user.email.substring(0, 2).toUpperCase() 
+  const userInitials = user?.email
+    ? user.email.substring(0, 2).toUpperCase()
     : 'NA';
 
   return (
@@ -161,7 +157,7 @@ function NurseHeader() {
       </div>
 
       <div className="flex items-center gap-4">
-        <button 
+        <button
           className="relative rounded-full p-2 hover:bg-muted transition-colors"
           aria-label={`Notifications: ${alertCount} unread alerts`}
         >

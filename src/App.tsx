@@ -18,6 +18,7 @@ import PatientIntakePage from "./pages/PatientIntakePage";
 import TriageScreen from "./pages/TriageScreen";
 import PatientQueue from "./pages/PatientQueue";
 import TrackBoard from "./pages/TrackBoard";
+import MyPatients from "./pages/MyPatients";
 import AuditLogs from "./pages/AuditLogs";
 import Settings from "./pages/Settings";
 import NotFound from "./pages/NotFound";
@@ -49,7 +50,7 @@ const App = () => (
               {/* Physician Workbench Routes */}
               <Route path="/physician" element={<PhysicianLayout />}>
                 <Route index element={<TrackBoard />} />
-                <Route path="my-patients" element={<TrackBoard />} />
+                <Route path="my-patients" element={<MyPatients />} />
                 <Route path="audit" element={<AuditLogs />} />
                 <Route path="settings" element={<Settings />} />
               </Route>

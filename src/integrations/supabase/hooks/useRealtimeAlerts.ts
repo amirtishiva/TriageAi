@@ -67,9 +67,9 @@ export function useRealtimeAlerts(userId?: string) {
 
   const handleCriticalCase = useCallback((payload: { payload: CriticalCasePayload }) => {
     const data = payload.payload;
-    
+
     addAlert('critical_case', data);
-    
+
     // Activate emergency mode for ESI 1
     if (data.esiLevel === 1) {
       activateEmergencyMode(data.patientId);
@@ -84,7 +84,7 @@ export function useRealtimeAlerts(userId?: string) {
     // Play alert sound if available
     try {
       const audio = new Audio('/alert.mp3');
-      audio.play().catch(() => {});
+      audio.play().catch(() => { });
     } catch (e) {
       // Ignore audio errors
     }
@@ -92,9 +92,9 @@ export function useRealtimeAlerts(userId?: string) {
 
   const handleEscalation = useCallback((payload: { payload: EscalationPayload }) => {
     const data = payload.payload;
-    
+
     addAlert('escalation', data);
-    
+
     toast({
       title: '⚠️ Escalation Alert',
       description: `Case escalated to ${data.assignedRole}: ${data.patient.firstName} ${data.patient.lastName}`,
@@ -104,9 +104,9 @@ export function useRealtimeAlerts(userId?: string) {
 
   const handleCaseAssigned = useCallback((payload: { payload: CaseAssignedPayload }) => {
     const data = payload.payload;
-    
+
     addAlert('case_assigned', data);
-    
+
     // Only show if assigned to current user
     if (userId && data.assignedTo === userId) {
       toast({
@@ -118,13 +118,13 @@ export function useRealtimeAlerts(userId?: string) {
 
   const handleCaseAcknowledged = useCallback((payload: { payload: CaseAcknowledgedPayload }) => {
     const data = payload.payload;
-    
+
     addAlert('case_acknowledged', data);
-    
-    const timeStr = data.responseTimeMs 
-      ? `${Math.round(data.responseTimeMs / 1000)}s` 
+
+    const timeStr = data.responseTimeMs
+      ? `${Math.round(data.responseTimeMs / 1000)}s`
       : 'N/A';
-    
+
     toast({
       title: '✅ Case Acknowledged',
       description: `Response time: ${timeStr} ${data.metTarget ? '(met target)' : '(exceeded target)'}`,
@@ -149,5 +149,9 @@ export function useRealtimeAlerts(userId?: string) {
     setAlerts([]);
   }, []);
 
-  return { alerts, clearAlerts };
+  const dismissAlert = useCallback((id: string) => {
+    setAlerts(prev => prev.filter(alert => alert.id !== id));
+  }, []);
+
+  return { alerts, clearAlerts, dismissAlert };
 }

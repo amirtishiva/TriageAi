@@ -5,10 +5,15 @@ import type { Database } from '@/integrations/supabase/types';
 
 type TriageCase = Database['public']['Tables']['triage_cases']['Row'];
 type Patient = Database['public']['Tables']['patients']['Row'];
+type VitalSign = Database['public']['Tables']['vital_signs']['Row'];
 type PatientStatus = Database['public']['Enums']['patient_status'];
 
+interface PatientWithVitals extends Patient {
+  vital_signs: VitalSign[];
+}
+
 interface TriageCaseWithPatient extends TriageCase {
-  patients: Patient | null;
+  patients: PatientWithVitals | null;
 }
 
 interface UseTriageCasesOptions {
@@ -25,8 +30,7 @@ export function useTriageCases(options?: UseTriageCasesOptions) {
     queryFn: async (): Promise<TriageCaseWithPatient[]> => {
       let queryBuilder = supabase
         .from('triage_cases')
-        .select('*, patients(*)');
-
+        .select('*, patients(*, vital_signs(*))');  // Vitals nested under patients
       if (options?.status && options.status.length > 0) {
         queryBuilder = queryBuilder.in('status', options.status);
       }

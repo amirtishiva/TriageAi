@@ -6,11 +6,11 @@ import { ESIBadge } from '@/components/triage/ESIBadge';
 import { PatientCard } from '@/components/triage/PatientCard';
 import { useTriageCases } from '@/integrations/supabase/hooks/useTriageCases';
 import { useRealtimeAlerts } from '@/integrations/supabase/hooks/useRealtimeAlerts';
-import { 
-  Activity, 
-  Clock, 
-  Users, 
-  AlertTriangle, 
+import {
+  Activity,
+  Clock,
+  Users,
+  AlertTriangle,
   TrendingUp,
   UserPlus,
   Stethoscope,
@@ -101,9 +101,9 @@ function ActiveAlertBanner({ alerts, onViewAlerts }: ActiveAlertBannerProps) {
           ESI Level 1-2 cases require immediate attention
         </p>
       </div>
-      <Button 
-        variant="destructive" 
-        size="sm" 
+      <Button
+        variant="destructive"
+        size="sm"
         className="gap-2"
         onClick={onViewAlerts}
       >
@@ -148,13 +148,13 @@ function ESIDistribution({ distribution }: ESIDistributionProps) {
           {([1, 2, 3, 4, 5] as ESILevel[]).map((level) => {
             const count = distribution[level];
             const percentage = total > 0 ? (count / total) * 100 : 0;
-            
+
             return (
               <div key={level} className="flex items-center gap-3">
                 <ESIBadge level={level} size="sm" />
                 <div className="flex-1">
                   <div className="h-2 rounded-full bg-muted overflow-hidden">
-                    <div 
+                    <div
                       className={cn(
                         'h-full rounded-full transition-all duration-500',
                         level === 1 && 'bg-esi-1',
@@ -208,7 +208,7 @@ function mapPatient(dbPatient: Database['public']['Tables']['patients']['Row']):
   const dob = new Date(dbPatient.date_of_birth);
   const today = new Date();
   const age = today.getFullYear() - dob.getFullYear();
-  
+
   return {
     id: dbPatient.id,
     mrn: dbPatient.mrn,
@@ -232,10 +232,10 @@ export default function NurseDashboard() {
   const navigate = useNavigate();
   const [currentTime, setCurrentTime] = useState(new Date());
   const [showAlertsDialog, setShowAlertsDialog] = useState(false);
-  
+
   // Fetch triage cases with patients
   const { data: triageCases, isLoading } = useTriageCases();
-  
+
   // Get real-time alerts
   const { alerts: realtimeAlerts } = useRealtimeAlerts();
 
@@ -260,11 +260,11 @@ export default function NurseDashboard() {
 
     for (const tc of triageCases) {
       if (!tc.patients) continue;
-      
+
       const patient = mapPatient(tc.patients);
       const esiStr = tc.validated_esi || tc.ai_draft_esi;
       const esiNum = esiStr ? (Number(esiStr) as ESILevel) : undefined;
-      
+
       if (esiNum && esiNum >= 1 && esiNum <= 5) {
         dist[esiNum]++;
         if (esiNum <= 2) critical++;
@@ -293,7 +293,7 @@ export default function NurseDashboard() {
   // Build alerts for display
   const displayAlerts: Alert[] = useMemo(() => {
     const alertList: Alert[] = [];
-    
+
     // Add realtime alerts (only escalations with proper payload)
     if (realtimeAlerts && Array.isArray(realtimeAlerts)) {
       for (const a of realtimeAlerts) {
@@ -337,7 +337,7 @@ export default function NurseDashboard() {
         }
       }
     }
-    
+
     // Add critical cases as alerts
     if (triageCases) {
       for (const tc of triageCases) {
@@ -382,11 +382,11 @@ export default function NurseDashboard() {
         <div>
           <h1 className="text-2xl font-bold text-foreground">Nurse Dashboard</h1>
           <p className="text-muted-foreground">
-            {currentTime.toLocaleDateString(undefined, { 
-              weekday: 'long', 
-              year: 'numeric', 
-              month: 'long', 
-              day: 'numeric' 
+            {currentTime.toLocaleDateString(undefined, {
+              weekday: 'long',
+              year: 'numeric',
+              month: 'long',
+              day: 'numeric'
             })}
             <span className="mx-2">•</span>
             <span className="font-vitals">{currentTime.toLocaleTimeString()}</span>
@@ -399,9 +399,9 @@ export default function NurseDashboard() {
       </div>
 
       {/* Active Alerts */}
-      <ActiveAlertBanner 
-        alerts={displayAlerts} 
-        onViewAlerts={() => setShowAlertsDialog(true)} 
+      <ActiveAlertBanner
+        alerts={displayAlerts}
+        onViewAlerts={() => setShowAlertsDialog(true)}
       />
 
       {/* Stats Grid */}
@@ -497,29 +497,21 @@ export default function NurseDashboard() {
               <CardTitle className="text-base">Quick Actions</CardTitle>
             </CardHeader>
             <CardContent className="space-y-2">
-              <Button 
-                variant="outline" 
+              <Button
+                variant="outline"
                 className="w-full justify-start gap-2"
                 onClick={() => navigate('/nurse/intake')}
               >
                 <UserPlus className="h-4 w-4" />
                 Register New Patient
               </Button>
-              <Button 
-                variant="outline" 
+              <Button
+                variant="outline"
                 className="w-full justify-start gap-2"
                 onClick={() => navigate('/nurse/queue')}
               >
                 <Users className="h-4 w-4" />
                 View Full Queue
-              </Button>
-              <Button 
-                variant="outline" 
-                className="w-full justify-start gap-2"
-                onClick={() => navigate('/physician/audit')}
-              >
-                <Activity className="h-4 w-4" />
-                View Audit Logs
               </Button>
             </CardContent>
           </Card>
@@ -538,7 +530,7 @@ export default function NurseDashboard() {
               ESI Level 1-2 cases requiring immediate attention
             </DialogDescription>
           </DialogHeader>
-          
+
           <div className="space-y-3 py-4">
             {displayAlerts.filter(a => a.esiLevel <= 2).length === 0 ? (
               <p className="text-center text-muted-foreground py-8">
@@ -546,7 +538,7 @@ export default function NurseDashboard() {
               </p>
             ) : (
               displayAlerts.filter(a => a.esiLevel <= 2).map((alert) => (
-                <div 
+                <div
                   key={alert.id}
                   className="p-4 rounded-lg border border-esi-1/30 bg-esi-1-bg"
                 >
@@ -562,8 +554,8 @@ export default function NurseDashboard() {
                     </span>
                   </div>
                   <p className="text-sm text-muted-foreground mb-3">{alert.message}</p>
-                  <Button 
-                    size="sm" 
+                  <Button
+                    size="sm"
                     className="w-full"
                     onClick={() => {
                       setShowAlertsDialog(false);

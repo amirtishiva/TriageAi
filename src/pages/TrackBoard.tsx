@@ -26,15 +26,16 @@ import { Separator } from '@/components/ui/separator';
 import { ESIBadge } from '@/components/triage/ESIBadge';
 import { VitalsDisplay } from '@/components/triage/VitalsDisplay';
 import { SBARDisplay } from '@/components/triage/SBARDisplay';
+import { WorkupOrdersPanel } from '@/components/triage/WorkupOrdersPanel';
 import { useEmergency } from '@/contexts/EmergencyContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { useTrackBoard, useAcknowledgeCase, TrackBoardCase, useLatestVitals, useAuditLogs } from '@/integrations/supabase/hooks';
 import { ESILevel, ESI_RESPONSE_TIMES, VitalSigns, SBARSummary } from '@/types/triage';
-import { 
-  Search, 
-  Clock, 
-  CheckCircle2, 
-  AlertTriangle, 
+import {
+  Search,
+  Clock,
+  CheckCircle2,
+  AlertTriangle,
   Bell,
   Filter,
   ChevronDown,
@@ -56,11 +57,11 @@ import { supabase } from '@/integrations/supabase/client';
 // Component for fetching vitals in dialog
 function CaseVitals({ patientId }: { patientId: string }) {
   const { data: vitals, isLoading } = useLatestVitals(patientId);
-  
+
   if (isLoading) {
     return <Skeleton className="h-24 w-full" />;
   }
-  
+
   if (!vitals) {
     return (
       <div className="p-3 bg-muted/30 rounded-lg text-center text-muted-foreground text-sm">
@@ -68,12 +69,12 @@ function CaseVitals({ patientId }: { patientId: string }) {
       </div>
     );
   }
-  
+
   const formattedVitals: VitalSigns = {
     heartRate: vitals.heart_rate || 0,
-    bloodPressure: { 
-      systolic: vitals.systolic_bp || 0, 
-      diastolic: vitals.diastolic_bp || 0 
+    bloodPressure: {
+      systolic: vitals.systolic_bp || 0,
+      diastolic: vitals.diastolic_bp || 0
     },
     respiratoryRate: vitals.respiratory_rate || 0,
     temperature: vitals.temperature ? Number(vitals.temperature) : 0,
@@ -81,18 +82,19 @@ function CaseVitals({ patientId }: { patientId: string }) {
     painLevel: vitals.pain_level || 0,
     timestamp: new Date(vitals.recorded_at),
   };
-  
+
   return <VitalsDisplay vitals={formattedVitals} layout="compact" />;
 }
 
 // Component for case status timeline (PHYS-10)
 function CaseStatusTimeline({ triageCaseId }: { triageCaseId: string }) {
-  const { data: logs, isLoading } = useAuditLogs({ 
-    limit: 10,
+  const { data: response, isLoading } = useAuditLogs({
+    triageCaseId,
+    pageSize: 10,
   });
 
-  // Filter logs for this case
-  const caseEvents = (logs || []).filter(log => log.triage_case_id === triageCaseId);
+  // Logs are already filtered server-side
+  const caseEvents = response?.logs || [];
 
   if (isLoading) {
     return <Skeleton className="h-20 w-full" />;
@@ -141,7 +143,7 @@ export default function TrackBoard() {
   const { user, session } = useAuth();
   const { activateEmergencyMode, deactivateEmergencyMode, checkCriticalState } = useEmergency();
   const acknowledgeMutation = useAcknowledgeCase();
-  
+
   const [searchQuery, setSearchQuery] = useState('');
   const [filterESI, setFilterESI] = useState<ESILevel | 'all'>('all');
   const [sortBy, setSortBy] = useState<'esi' | 'time'>('esi');
@@ -150,6 +152,7 @@ export default function TrackBoard() {
   const [isAcknowledging, setIsAcknowledging] = useState(false);
   const [isDischarging, setIsDischarging] = useState(false);
   const [isStartingTreatment, setIsStartingTreatment] = useState(false);
+  const [selectedOrders, setSelectedOrders] = useState<string[]>([]);
 
   // Fetch track board data with filters - only when authenticated
   const { data: trackBoardData, isLoading, refetch, isRefetching } = useTrackBoard({
@@ -159,16 +162,17 @@ export default function TrackBoard() {
 
   // Filter and sort cases client-side for search and "My Patients" view
   const filteredCases = (trackBoardData?.cases || [])
+    .filter(c => c && c.patient) // Filter out malformed cases
     .filter(c => {
       // For "My Patients" view, filter to cases assigned to current user
       if (isMyPatientsView && user) {
         if (c.assignedTo !== user.id) return false;
       }
-      
+
       if (!searchQuery) return true;
       const name = `${c.patient.firstName} ${c.patient.lastName}`.toLowerCase();
-      return name.includes(searchQuery.toLowerCase()) || 
-             c.patient.mrn.toLowerCase().includes(searchQuery.toLowerCase());
+      return name.includes(searchQuery.toLowerCase()) ||
+        c.patient.mrn.toLowerCase().includes(searchQuery.toLowerCase());
     })
     .sort((a, b) => {
       if (sortBy === 'esi') {
@@ -196,12 +200,13 @@ export default function TrackBoard() {
 
   const handleCloseDialog = () => {
     setSelectedCase(null);
+    setSelectedOrders([]);
     deactivateEmergencyMode();
   };
 
   const handleAcknowledge = async () => {
     if (!selectedCase) return;
-    
+
     setIsAcknowledging(true);
     try {
       await acknowledgeMutation.mutateAsync({
@@ -218,20 +223,32 @@ export default function TrackBoard() {
     }
   };
 
-  // PHYS-11: Handle start treatment
+  // PHYS-11: Handle start treatment with workup orders
   const handleStartTreatment = async () => {
     if (!selectedCase) return;
-    
+
     setIsStartingTreatment(true);
     try {
       const { error } = await supabase
         .from('triage_cases')
         .update({ status: 'in_treatment' })
         .eq('id', selectedCase.id);
-      
+
       if (error) throw error;
-      
-      toast.success('Treatment started');
+
+      // Log workup orders in audit (orders stored in audit_logs details)
+      await supabase.from('audit_logs').insert({
+        triage_case_id: selectedCase.id,
+        patient_id: selectedCase.patientId,
+        action: 'status_changed',
+        details: {
+          status: 'in_treatment',
+          workup_orders: selectedOrders.length > 0 ? selectedOrders : [],
+          orders_count: selectedOrders.length
+        }
+      });
+
+      toast.success(`Treatment started${selectedOrders.length > 0 ? ` with ${selectedOrders.length} orders` : ''}`);
       handleCloseDialog();
       refetch();
     } catch (error) {
@@ -245,7 +262,7 @@ export default function TrackBoard() {
   // PHYS-11: Handle discharge patient
   const handleDischarge = async () => {
     if (!selectedCase) return;
-    
+
     setIsDischarging(true);
     try {
       // Update triage case status
@@ -253,17 +270,17 @@ export default function TrackBoard() {
         .from('triage_cases')
         .update({ status: 'discharged' })
         .eq('id', selectedCase.id);
-      
+
       if (caseError) throw caseError;
-      
+
       // Update patient status
       const { error: patientError } = await supabase
         .from('patients')
         .update({ status: 'discharged' })
         .eq('id', selectedCase.patientId);
-      
+
       if (patientError) throw patientError;
-      
+
       toast.success('Patient discharged successfully');
       handleCloseDialog();
       refetch();
@@ -290,26 +307,26 @@ export default function TrackBoard() {
   const handleKeyDown = useCallback((e: KeyboardEvent) => {
     // Only handle if no input is focused
     if (document.activeElement?.tagName === 'INPUT') return;
-    
+
     // Ctrl+1-5 for ESI filter
     if (e.ctrlKey && ['1', '2', '3', '4', '5'].includes(e.key)) {
       e.preventDefault();
       setFilterESI(parseInt(e.key) as ESILevel);
       toast.info(`Filtered to ESI ${e.key}`);
     }
-    
+
     // Ctrl+0 for all
     if (e.ctrlKey && e.key === '0') {
       e.preventDefault();
       setFilterESI('all');
       toast.info('Showing all ESI levels');
     }
-    
+
     // Escape to close dialog
     if (e.key === 'Escape' && selectedCase) {
       handleCloseDialog();
     }
-    
+
     // Enter to acknowledge when dialog is open
     if (e.key === 'Enter' && selectedCase && selectedCase.status !== 'acknowledged') {
       e.preventDefault();
@@ -324,8 +341,8 @@ export default function TrackBoard() {
 
   const SortIcon = ({ column }: { column: 'esi' | 'time' }) => {
     if (sortBy !== column) return null;
-    return sortOrder === 'asc' ? 
-      <ChevronUp className="h-4 w-4 ml-1" /> : 
+    return sortOrder === 'asc' ?
+      <ChevronUp className="h-4 w-4 ml-1" /> :
       <ChevronDown className="h-4 w-4 ml-1" />;
   };
 
@@ -340,7 +357,7 @@ export default function TrackBoard() {
             {isMyPatientsView ? 'My Patients' : 'Physician Track Board'}
           </h1>
           <p className="text-muted-foreground">
-            {isMyPatientsView 
+            {isMyPatientsView
               ? 'Cases assigned to you for treatment'
               : 'Manage and acknowledge patient cases by priority'
             }
@@ -448,7 +465,7 @@ export default function TrackBoard() {
             <Table>
               <TableHeader>
                 <TableRow className="hover:bg-transparent">
-                  <TableHead 
+                  <TableHead
                     className="cursor-pointer hover:text-foreground"
                     onClick={() => toggleSort('esi')}
                   >
@@ -459,7 +476,7 @@ export default function TrackBoard() {
                   </TableHead>
                   <TableHead>Patient</TableHead>
                   <TableHead className="hidden md:table-cell">Chief Complaint</TableHead>
-                  <TableHead 
+                  <TableHead
                     className="cursor-pointer hover:text-foreground"
                     onClick={() => toggleSort('time')}
                   >
@@ -488,7 +505,7 @@ export default function TrackBoard() {
                     const isCritical = esiLevel <= 2;
 
                     return (
-                      <TableRow 
+                      <TableRow
                         key={triageCase.id}
                         className={cn(
                           'cursor-pointer transition-colors focus-within:bg-accent',
@@ -550,7 +567,7 @@ export default function TrackBoard() {
                           </div>
                         </TableCell>
                         <TableCell className="hidden sm:table-cell">
-                          <Badge 
+                          <Badge
                             variant="outline"
                             className={cn(
                               'text-xs',
@@ -734,6 +751,17 @@ export default function TrackBoard() {
                     </div>
                   </div>
 
+                  {/* Workup Orders Panel - Show for acknowledged or pre-treatment cases */}
+                  {(selectedCase.status === 'validated' ||
+                    selectedCase.status === 'assigned' ||
+                    selectedCase.status === 'acknowledged') && (
+                      <WorkupOrdersPanel
+                        esiLevel={selectedCase.esiLevel as ESILevel}
+                        selectedOrders={selectedOrders}
+                        onOrdersChange={setSelectedOrders}
+                      />
+                    )}
+
                   {/* PHYS-10: Status Timeline */}
                   <div>
                     <div className="flex items-center gap-2 mb-2">
@@ -753,12 +781,12 @@ export default function TrackBoard() {
                   <Button variant="outline" onClick={handleCloseDialog}>
                     Close
                   </Button>
-                  
+
                   {/* Show appropriate actions based on status */}
                   {selectedCase.status === 'validated' || selectedCase.status === 'assigned' ? (
-                    <Button 
-                      onClick={handleAcknowledge} 
-                      disabled={isAcknowledging} 
+                    <Button
+                      onClick={handleAcknowledge}
+                      disabled={isAcknowledging}
                       className={cn("gap-2", isSelectedCritical && "bg-esi-1 hover:bg-esi-1/90")}
                     >
                       {isAcknowledging ? (
@@ -774,8 +802,8 @@ export default function TrackBoard() {
                       )}
                     </Button>
                   ) : selectedCase.status === 'acknowledged' ? (
-                    <Button 
-                      onClick={handleStartTreatment} 
+                    <Button
+                      onClick={handleStartTreatment}
                       disabled={isStartingTreatment}
                       className="gap-2 bg-status-active hover:bg-status-active/90"
                     >
@@ -792,8 +820,8 @@ export default function TrackBoard() {
                       )}
                     </Button>
                   ) : selectedCase.status === 'in_treatment' ? (
-                    <Button 
-                      onClick={handleDischarge} 
+                    <Button
+                      onClick={handleDischarge}
                       disabled={isDischarging}
                       variant="outline"
                       className="gap-2 border-primary text-primary hover:bg-primary/10"
