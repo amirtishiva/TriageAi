@@ -58,7 +58,7 @@ const App = () => (
               {/* Legacy route redirects for backward compatibility */}
               <Route path="/intake" element={<Navigate to="/nurse/intake" replace />} />
               <Route path="/triage" element={<Navigate to="/nurse/triage" replace />} />
-              <Route path="/triage/:patientId" element={<Navigate to="/nurse/triage/:patientId" replace />} />
+              <Route path="/triage/:patientId" element={<Navigate to="/nurse/triage" replace />} />
               <Route path="/queue" element={<Navigate to="/nurse/queue" replace />} />
               <Route path="/trackboard" element={<Navigate to="/physician" replace />} />
               <Route path="/my-patients" element={<Navigate to="/physician/my-patients" replace />} />

@@ -1,6 +1,7 @@
 // AI Triage
 export { useAITriage } from './useAITriage';
 export { useValidateTriage } from './useValidateTriage';
+export * from './usePatientDocuments';
 export { useAcknowledgeCase } from './useAcknowledgeCase';
 
 // Track Board

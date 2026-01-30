@@ -1,4 +1,5 @@
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import type { Database } from '@/integrations/supabase/types';
 
@@ -35,6 +36,31 @@ export function useAuditLogs(options?: UseAuditLogsOptions) {
   const page = options?.page || 1;
   const pageSize = options?.pageSize || 20;
 
+  const queryClient = useQueryClient();
+
+  // Real-time subscription
+  useEffect(() => {
+    const channel = supabase
+      .channel('audit-logs-updates')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'audit_logs',
+        },
+        () => {
+          queryClient.invalidateQueries({ queryKey: ['audit-logs'] });
+          queryClient.invalidateQueries({ queryKey: ['audit-log-stats'] });
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [queryClient]);
+
   return useQuery({
     queryKey: ['audit-logs', options],
     queryFn: async (): Promise<AuditLogsResponse> => {
@@ -42,12 +68,12 @@ export function useAuditLogs(options?: UseAuditLogsOptions) {
         .from('audit_logs')
         .select(`
           *,
-          patients:patient_id (
+          patients (
             first_name,
             last_name,
             mrn
           ),
-          triage_cases:triage_case_id (
+          triage_cases (
             validated_esi,
             ai_draft_esi
           )

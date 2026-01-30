@@ -281,6 +281,17 @@ export default function TrackBoard() {
 
       if (patientError) throw patientError;
 
+      // Log discharge in audit
+      await supabase.from('audit_logs').insert({
+        triage_case_id: selectedCase.id,
+        patient_id: selectedCase.patientId,
+        action: 'status_changed',
+        details: {
+          status: 'discharged',
+          discharged_at: new Date().toISOString()
+        }
+      });
+
       toast.success('Patient discharged successfully');
       handleCloseDialog();
       refetch();

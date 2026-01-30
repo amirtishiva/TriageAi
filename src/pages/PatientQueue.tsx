@@ -1,12 +1,13 @@
 import { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { cn } from '@/lib/utils';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { PatientCard } from '@/components/triage/PatientCard';
 import { useTriageCases } from '@/integrations/supabase/hooks/useTriageCases';
 import { ESILevel, Patient, VitalSigns } from '@/types/triage';
-import { Search, Users, Filter, Clock, UserPlus, Loader2 } from 'lucide-react';
+import { Search, Users, Filter, Clock, UserPlus, Loader2, AlertTriangle, Activity, AlertCircle } from 'lucide-react';
 import type { Database } from '@/integrations/supabase/types';
 
 // Default vitals for when real vitals aren't available
@@ -90,15 +91,37 @@ export default function PatientQueue() {
   const { data: triageCases, isLoading } = useTriageCases();
 
   // Transform and filter data
-  const { patientsWithESI, waitingCount, inTriageCount, validatedCount } = useMemo(() => {
+  const {
+    patientsWithESI,
+    waitingCount,
+    inTriageCount,
+    validatedCount,
+    highAcuityCount,
+    avgWaitTime,
+    escalationCount
+  } = useMemo(() => {
     if (!triageCases) {
-      return { patientsWithESI: [], waitingCount: 0, inTriageCount: 0, validatedCount: 0 };
+      return {
+        patientsWithESI: [],
+        waitingCount: 0,
+        inTriageCount: 0,
+        validatedCount: 0,
+        highAcuityCount: 0,
+        avgWaitTime: 0,
+        escalationCount: 0
+      };
     }
 
     const patients: { patient: Patient; esiLevel?: ESILevel }[] = [];
     let waiting = 0;
     let inTriage = 0;
     let validated = 0;
+    let highAcuity = 0;
+    let totalWaitTime = 0;
+    let waitTimeCount = 0;
+    let escalations = 0;
+
+    const now = new Date();
 
     for (const tc of triageCases) {
       if (!tc.patients) continue;
@@ -113,9 +136,48 @@ export default function PatientQueue() {
       if (status === 'waiting') waiting++;
       else if (status === 'in-triage' || status === 'pending-validation') inTriage++;
       else if (status === 'validated' || status === 'assigned' || status === 'acknowledged') validated++;
+
+      // High Acuity: ESI 1-2
+      if (esiNum && (esiNum === 1 || esiNum === 2)) {
+        highAcuity++;
+      }
+
+      // Escalation Status (Active levels only)
+      if (tc.escalation_status && !['none', 'resolved'].includes(tc.escalation_status)) {
+        escalations++;
+      }
+
+      // Wait Time Calculation (Operational definition: Door to Doctor)
+      if (status !== 'discharged') {
+        const arrival = new Date(tc.patients.arrival_time);
+        let waitMinutes = 0;
+
+        if (status === 'acknowledged' || status === 'in-treatment') {
+          // If already seen, wait time is Arrival -> Acknowledged
+          const ackTime = tc.acknowledged_at ? new Date(tc.acknowledged_at) : now;
+          waitMinutes = (ackTime.getTime() - arrival.getTime()) / (1000 * 60);
+        } else {
+          // If still waiting, wait time is Arrival -> Now
+          waitMinutes = (now.getTime() - arrival.getTime()) / (1000 * 60);
+        }
+
+        // Outlier Handling: Exclude cases > 24 hours (likely abandoned/test data)
+        if (waitMinutes > 0 && waitMinutes < 1440) {
+          totalWaitTime += waitMinutes;
+          waitTimeCount++;
+        }
+      }
     }
 
-    return { patientsWithESI: patients, waitingCount: waiting, inTriageCount: inTriage, validatedCount: validated };
+    return {
+      patientsWithESI: patients,
+      waitingCount: waiting,
+      inTriageCount: inTriage,
+      validatedCount: validated,
+      highAcuityCount: highAcuity,
+      avgWaitTime: waitTimeCount > 0 ? Math.round(totalWaitTime / waitTimeCount) : 0,
+      escalationCount: escalations
+    };
   }, [triageCases]);
 
   // Apply filters
@@ -199,38 +261,97 @@ export default function PatientQueue() {
       </Card>
 
       {/* Stats */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+        {/* Row 1/Col 1: Waiting */}
         <Card className="clinical-card">
-          <CardContent className="p-4 flex items-center gap-4">
-            <div className="p-3 rounded-lg bg-status-pending/10">
-              <Clock className="h-5 w-5 text-status-pending" />
-            </div>
-            <div>
-              <p className="text-2xl font-bold font-vitals">{waitingCount}</p>
+          <CardContent className="p-4 flex flex-col gap-1 justify-center">
+            <div className="flex items-center gap-2">
+              <div className="p-2 rounded-lg bg-status-pending/10">
+                <Clock className="h-4 w-4 text-status-pending" />
+              </div>
               <p className="text-sm text-muted-foreground">Waiting</p>
             </div>
+            <p className="text-2xl font-bold font-vitals ml-1">{waitingCount}</p>
           </CardContent>
         </Card>
-        <Card className="clinical-card">
-          <CardContent className="p-4 flex items-center gap-4">
-            <div className="p-3 rounded-lg bg-status-active/10">
-              <Users className="h-5 w-5 text-status-active" />
+
+        {/* Row 1/Col 2: High Acuity */}
+        <Card className="clinical-card border-esi-1/30">
+          <CardContent className="p-4 flex flex-col gap-1 justify-center">
+            <div className="flex items-center gap-2">
+              <div className="p-2 rounded-lg bg-esi-1/10">
+                <AlertTriangle className="h-4 w-4 text-esi-1" />
+              </div>
+              <p className="text-sm text-muted-foreground">High Acuity</p>
             </div>
-            <div>
-              <p className="text-2xl font-bold font-vitals">{inTriageCount}</p>
+            <p className="text-2xl font-bold font-vitals ml-1 text-esi-1">{highAcuityCount}</p>
+          </CardContent>
+        </Card>
+
+        {/* Row 1/Col 3: Avg Wait */}
+        <Card className="clinical-card">
+          <CardContent className="p-4 flex flex-col gap-1 justify-center">
+            <div className="flex items-center gap-2">
+              <div className="p-2 rounded-lg bg-primary/10">
+                <Activity className="h-4 w-4 text-primary" />
+              </div>
+              <p className="text-sm text-muted-foreground">Avg Wait</p>
+            </div>
+            <div className="flex items-baseline gap-1 ml-1">
+              <p className="text-2xl font-bold font-vitals">{avgWaitTime}</p>
+              <span className="text-xs text-muted-foreground">min</span>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Row 2 / Row 1 on LG: In Triage */}
+        <Card className="clinical-card">
+          <CardContent className="p-4 flex flex-col gap-1 justify-center">
+            <div className="flex items-center gap-2">
+              <div className="p-2 rounded-lg bg-status-active/10">
+                <Users className="h-4 w-4 text-status-active" />
+              </div>
               <p className="text-sm text-muted-foreground">In Triage</p>
             </div>
+            <p className="text-2xl font-bold font-vitals ml-1">{inTriageCount}</p>
           </CardContent>
         </Card>
+
+        {/* Row 2/Col 2: Validated */}
         <Card className="clinical-card">
-          <CardContent className="p-4 flex items-center gap-4">
-            <div className="p-3 rounded-lg bg-status-completed/10">
-              <Users className="h-5 w-5 text-status-completed" />
-            </div>
-            <div>
-              <p className="text-2xl font-bold font-vitals">{validatedCount}</p>
+          <CardContent className="p-4 flex flex-col gap-1 justify-center">
+            <div className="flex items-center gap-2">
+              <div className="p-2 rounded-lg bg-status-completed/10">
+                <Users className="h-4 w-4 text-status-completed" />
+              </div>
               <p className="text-sm text-muted-foreground">Validated</p>
             </div>
+            <p className="text-2xl font-bold font-vitals ml-1">{validatedCount}</p>
+          </CardContent>
+        </Card>
+
+        {/* Row 2/Col 3: Escalations */}
+        <Card className={cn(
+          "clinical-card",
+          escalationCount > 0 ? "border-destructive/30 bg-destructive/5" : ""
+        )}>
+          <CardContent className="p-4 flex flex-col gap-1 justify-center">
+            <div className="flex items-center gap-2">
+              <div className={cn(
+                "p-2 rounded-lg",
+                escalationCount > 0 ? "bg-destructive/10" : "bg-muted"
+              )}>
+                <AlertCircle className={cn(
+                  "h-4 w-4",
+                  escalationCount > 0 ? "text-destructive" : "text-muted-foreground"
+                )} />
+              </div>
+              <p className="text-sm text-muted-foreground">Escalations</p>
+            </div>
+            <p className={cn(
+              "text-2xl font-bold font-vitals ml-1",
+              escalationCount > 0 ? "text-destructive" : ""
+            )}>{escalationCount}</p>
           </CardContent>
         </Card>
       </div>
@@ -273,7 +394,7 @@ export default function PatientQueue() {
                 patient.status === 'waiting' ? 'Start Triage' :
                   patient.status === 'in-triage' ? 'Continue Triage' : 'View Details'
               }
-              onAction={() => navigate(`/triage/${patient.id}`)}
+              onAction={() => navigate(`/nurse/triage/${patient.id}`)}
             />
           ))
         )}

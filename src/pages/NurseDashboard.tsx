@@ -271,7 +271,9 @@ export default function NurseDashboard() {
       }
 
       const tcStatus = mapStatus(tc.status);
-      if (tcStatus === 'waiting') {
+      // Validated means they are done with triage but waiting for physician
+      // Assigned/Acknowledged means they are waiting for treatment to start
+      if (tcStatus === 'waiting' || tcStatus === 'validated' || tcStatus === 'assigned' || tcStatus === 'acknowledged') {
         waiting.push({ patient, esiLevel: esiNum });
         const waitMs = Date.now() - new Date(tc.created_at).getTime();
         totalWaitMs += waitMs;

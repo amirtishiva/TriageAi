@@ -153,6 +153,45 @@ Deno.serve(async (req) => {
     // Map ESI to enum value
     const esiLevel = String(aiResult.esiLevel || '3')
 
+    // 1. Update Patient Data (Chief Complaint & Demographics if changed)
+    const { error: patientUpdateError } = await supabase
+      .from('patients')
+      .update({
+        chief_complaint: chiefComplaint,
+        // Update these if they were passed and are valid
+        ...(age ? { age } : {}), // approximate update if age is passed
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', patientId)
+
+    if (patientUpdateError) {
+      console.error('Failed to update patient data:', patientUpdateError)
+      // Continue anyway, not fatal for triage generation
+    }
+
+    // 2. Insert Vitals if provided
+    if (vitals && Object.keys(vitals).length > 0) {
+      const { error: vitalsError } = await supabase
+        .from('vital_signs')
+        .insert({
+          patient_id: patientId,
+          heart_rate: vitals.heartRate,
+          systolic_bp: vitals.systolicBp,
+          diastolic_bp: vitals.diastolicBp,
+          respiratory_rate: vitals.respiratoryRate,
+          temperature: vitals.temperature,
+          oxygen_saturation: vitals.oxygenSaturation,
+          pain_level: vitals.painLevel,
+          recorded_by: userId,
+          recorded_at: new Date().toISOString()
+        })
+
+      if (vitalsError) {
+        console.error('Failed to insert vitals:', vitalsError)
+        // Continue, but log error
+      }
+    }
+
     // Update or create triage case
     const { data: existingCase, error: fetchError } = await supabase
       .from('triage_cases')

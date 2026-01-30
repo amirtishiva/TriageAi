@@ -28,27 +28,30 @@ import { useEmergency } from '@/contexts/EmergencyContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { usePatient } from '@/integrations/supabase/hooks/usePatients';
 import { useLatestVitals } from '@/integrations/supabase/hooks/useVitalSigns';
-import { useAITriage, useValidateTriage } from '@/integrations/supabase/hooks';
+import { useAITriage, useValidateTriage, useTriageCases, usePatientDocuments } from '@/integrations/supabase/hooks';
 import { supabase } from '@/integrations/supabase/client';
-import { 
-  ESILevel, 
-  AITriageResult, 
-  OverrideRationale, 
+import {
+  ESILevel,
+  AITriageResult,
+  OverrideRationale,
   OVERRIDE_RATIONALE_LABELS,
   ESI_LABELS,
   VitalSigns
 } from '@/types/triage';
-import { 
-  ArrowLeft, 
-  Bot, 
-  CheckCircle2, 
-  Edit3, 
+import {
+  ArrowLeft,
+  Bot,
+  CheckCircle2,
+  Edit3,
   AlertTriangle,
   Loader2,
   Sparkles,
   Clock,
   User,
-  History
+  History,
+  FileText,
+  File,
+  Stethoscope
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
@@ -58,15 +61,16 @@ export default function TriageScreen() {
   const { patientId } = useParams();
   const { user } = useAuth();
   const { activateEmergencyMode, deactivateEmergencyMode, checkCriticalState } = useEmergency();
-  
+
   // Fetch patient data from database
   const { data: patient, isLoading: isLoadingPatient } = usePatient(patientId);
   const { data: latestVitals } = useLatestVitals(patientId);
-  
+  const { data: documents } = usePatientDocuments(patientId);
+
   // AI Triage mutation
   const aiTriageMutation = useAITriage();
   const validateMutation = useValidateTriage();
-  
+
   const [isAnalyzing, setIsAnalyzing] = useState(true);
   const [aiResult, setAIResult] = useState<AITriageResult | null>(null);
   const [triageCaseId, setTriageCaseId] = useState<string | null>(null);
@@ -106,12 +110,96 @@ export default function TriageScreen() {
     };
   };
 
-  // Trigger AI analysis when patient data is loaded
+  // Fetch existing triage cases for this patient
+  const { data: existingCases } = useTriageCases({ patientId, enabled: !!patientId });
+
+  // Trigger AI analysis when patient data is loaded AND no existing case found
   useEffect(() => {
-    if (patient && patientId && !aiResult && !aiTriageMutation.isPending) {
+    // Find a case that has actually been analyzed (has AI results)
+    const analyzedCase = existingCases && existingCases.length > 0
+      ? existingCases.find(c => c.ai_draft_esi !== null)
+      : null;
+
+    // Find any case (even if just a shell from intake)
+    const shellCase = existingCases && existingCases.length > 0 ? existingCases[0] : null;
+
+    if (analyzedCase) {
+      setTriageCaseId(analyzedCase.id);
+
+      // Parse influencing factors from JSON
+      let influencers: any[] = [];
+      try {
+        if (analyzedCase.ai_influencing_factors) {
+          influencers = typeof analyzedCase.ai_influencing_factors === 'string'
+            ? JSON.parse(analyzedCase.ai_influencing_factors)
+            : analyzedCase.ai_influencing_factors;
+        }
+      } catch (e) {
+        console.error('Error parsing influencing factors', e);
+      }
+
+      const getMappedRationale = (dbRationale: string | null): OverrideRationale | '' => {
+        if (!dbRationale) return '';
+        const map: Record<string, OverrideRationale> = {
+          'clinical_judgment': 'clinical-judgment',
+          'additional_findings': 'additional-findings',
+          'patient_history': 'patient-history',
+          'vital_change': 'vital-change',
+          'symptom_evolution': 'symptom-evolution',
+          'family_concern': 'family-concern',
+          'other': 'other'
+        };
+        return map[dbRationale] || '';
+      };
+
+      const validatedEsiNum = analyzedCase.validated_esi ? Number(analyzedCase.validated_esi) : undefined;
+      const draftEsiNum = analyzedCase.ai_draft_esi ? Number(analyzedCase.ai_draft_esi) : undefined;
+      const finalDraftESI = (draftEsiNum || validatedEsiNum || 3);
+
+      const result: AITriageResult = {
+        draftESI: finalDraftESI as ESILevel,
+        confidence: analyzedCase.ai_confidence || 0,
+        sbar: {
+          situation: analyzedCase.ai_sbar_situation || '',
+          background: analyzedCase.ai_sbar_background || '',
+          assessment: analyzedCase.ai_sbar_assessment || '',
+          recommendation: analyzedCase.ai_sbar_recommendation || '',
+        },
+        extractedSymptoms: analyzedCase.ai_extracted_symptoms || [],
+        extractedTimeline: analyzedCase.ai_extracted_timeline || '',
+        comorbidities: analyzedCase.ai_comorbidities || [],
+        influencingFactors: influencers.map((f: any) => ({
+          factor: f.factor || '',
+          category: (f.category as any) || 'other',
+          impact: (f.impact as any) || 'neutral',
+          weight: f.weight || 0,
+        })),
+        generatedAt: new Date(analyzedCase.ai_generated_at || analyzedCase.created_at),
+      };
+
+      setAIResult(result);
+      setSelectedESI(((validatedEsiNum || finalDraftESI) as ESILevel));
+      setIsAnalyzing(false);
+
+      // If confirmed/overridden previously, check override state
+      if (analyzedCase.is_override) {
+        setIsOverriding(true);
+        setOverrideRationale(getMappedRationale(analyzedCase.override_rationale));
+        setOverrideNotes(analyzedCase.override_notes || '');
+      }
+
+      return;
+    }
+
+    // Only run new analysis if no ANALYZED case exists
+    // If a shell case exists (from intake), we will update it.
+    if (patient && patientId && !aiResult && !aiTriageMutation.isPending && !isAnalyzing && !analyzedCase) {
+      // Double check we're not already analyzing to prevent loops
+      setIsAnalyzing(true);
+
       const vitals = formatVitals();
       const age = calculateAge(patient.date_of_birth);
-      
+
       aiTriageMutation.mutate({
         patientId,
         chiefComplaint: patient.chief_complaint,
@@ -150,8 +238,7 @@ export default function TriageScreen() {
           setAIResult(result);
           setSelectedESI(result.draftESI);
           setIsAnalyzing(false);
-          
-          // Activate emergency mode for critical patients
+
           if (checkCriticalState(result.draftESI)) {
             activateEmergencyMode(patientId);
           }
@@ -163,7 +250,7 @@ export default function TriageScreen() {
         },
       });
     }
-  }, [patient, patientId, latestVitals]);
+  }, [patient, patientId, latestVitals, existingCases]);
 
   // Cleanup on unmount
   useEffect(() => {
@@ -201,9 +288,9 @@ export default function TriageScreen() {
 
   const handleSubmit = async () => {
     if (!triageCaseId || !selectedESI) return;
-    
+
     setIsSubmitting(true);
-    
+
     try {
       await validateMutation.mutateAsync({
         triageCaseId,
@@ -212,7 +299,7 @@ export default function TriageScreen() {
         overrideRationale: isOverriding ? overrideRationale : undefined,
         overrideNotes: overrideNotes || undefined,
       });
-      
+
       toast.success('Triage validated successfully');
       deactivateEmergencyMode();
       navigate('/nurse/queue');
@@ -224,6 +311,23 @@ export default function TriageScreen() {
       setShowConfirmDialog(false);
     }
   };
+
+  if (!patientId) {
+    return (
+      <div className="flex flex-col items-center justify-center h-[60vh] text-center space-y-4 animate-fade-in-up">
+        <div className="h-16 w-16 bg-muted rounded-full flex items-center justify-center">
+          <Stethoscope className="h-8 w-8 text-muted-foreground" />
+        </div>
+        <div>
+          <h2 className="text-xl font-semibold">No Patient Selected</h2>
+          <p className="text-muted-foreground">Select a patient from the queue to start triage.</p>
+        </div>
+        <Button onClick={() => navigate('/nurse/queue')}>
+          Go to Patient Queue
+        </Button>
+      </div>
+    );
+  }
 
   if (isLoadingPatient) {
     return (
@@ -251,9 +355,9 @@ export default function TriageScreen() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-4">
-          <Button 
-            variant="ghost" 
-            size="icon" 
+          <Button
+            variant="ghost"
+            size="icon"
             onClick={() => navigate(-1)}
             aria-label="Go back"
           >
@@ -343,6 +447,70 @@ export default function TriageScreen() {
               <VitalsDisplay vitals={vitals} />
             </div>
           )}
+
+          {/* Documents Section */}
+          {documents && documents.length > 0 && (
+            <div className="mt-6 border-t pt-4">
+              <Label className="text-sm mb-3 block flex items-center gap-2">
+                <File className="h-4 w-4" />
+                Medical Documents & AI Analysis
+              </Label>
+              <div className="grid gap-3">
+                {documents.map((doc) => (
+                  <div key={doc.id} className="bg-muted/30 rounded-lg p-3 border border-border">
+                    <div className="flex items-start justify-between mb-2">
+                      <div className="flex items-center gap-2">
+                        <FileText className="h-4 w-4 text-primary" />
+                        <div>
+                          <p className="text-sm font-medium text-foreground truncate max-w-[200px]">
+                            {doc.file_path.split('/').pop()}
+                          </p>
+                          <p className="text-xs text-muted-foreground uppercase">
+                            {doc.file_type.split('/')[1]} • {doc.file_size ? Math.round(doc.file_size / 1024) + ' KB' : ''}
+                          </p>
+                        </div>
+                      </div>
+                      <a
+                        href={`https://lszmnsypyckjlrqjshxa.supabase.co/storage/v1/object/public/patient-documents/${doc.file_path}`}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-xs text-primary hover:underline"
+                      >
+                        View File
+                      </a>
+                    </div>
+
+                    {/* AI Analysis Result Display */}
+                    {doc.analysis_result && (
+                      <div className="bg-background rounded p-2 text-xs border border-border mt-2 space-y-1">
+                        <div className="flex items-center gap-1.5 text-primary mb-1">
+                          <Sparkles className="h-3 w-3" />
+                          <span className="font-semibold">AI Findings</span>
+                        </div>
+                        {/* Safe access to analysis_result properties since it's Json type */}
+                        {(doc.analysis_result as any).diagnosis && (
+                          <p><span className="font-medium">Diagnosis:</span> {(doc.analysis_result as any).diagnosis}</p>
+                        )}
+                        {(doc.analysis_result as any).summary && (
+                          <p><span className="font-medium">Summary:</span> {(doc.analysis_result as any).summary}</p>
+                        )}
+                        {(doc.analysis_result as any).findings && Array.isArray((doc.analysis_result as any).findings) && (
+                          <div className="mt-1">
+                            <p className="font-medium mb-0.5">Key Findings:</p>
+                            <ul className="list-disc list-inside pl-1 text-muted-foreground">
+                              {(doc.analysis_result as any).findings.map((f: string, i: number) => (
+                                <li key={i}>{f}</li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </CardContent>
       </Card>
 
@@ -357,7 +525,7 @@ export default function TriageScreen() {
               </div>
               <h3 className="text-xl font-semibold mt-6 mb-2">AI Analysis in Progress</h3>
               <p className="text-muted-foreground max-w-md">
-                Extracting clinical information, analyzing vitals, and generating 
+                Extracting clinical information, analyzing vitals, and generating
                 SBAR summary with ESI recommendation using Gemini AI...
               </p>
               <div className="flex items-center gap-2 mt-6 text-sm text-muted-foreground">
@@ -410,8 +578,8 @@ export default function TriageScreen() {
               </div>
 
               {/* Confidence Indicator */}
-              <ConfidenceIndicator 
-                confidence={aiResult.confidence} 
+              <ConfidenceIndicator
+                confidence={aiResult.confidence}
                 factors={aiResult.influencingFactors}
               />
 
@@ -491,11 +659,11 @@ export default function TriageScreen() {
                   <Edit3 className="h-4 w-4" />
                   You're changing from ESI {aiResult.draftESI} to ESI {selectedESI}
                 </div>
-                
+
                 <div className="space-y-2">
                   <Label htmlFor="override-rationale">Reason for Override</Label>
-                  <Select 
-                    value={overrideRationale} 
+                  <Select
+                    value={overrideRationale}
                     onValueChange={(v) => setOverrideRationale(v as OverrideRationale)}
                   >
                     <SelectTrigger id="override-rationale">
@@ -527,7 +695,7 @@ export default function TriageScreen() {
               <Button variant="outline" onClick={() => navigate(-1)}>
                 Cancel
               </Button>
-              <Button 
+              <Button
                 onClick={handleConfirm}
                 disabled={isOverriding && !overrideRationale}
                 size="lg"
@@ -579,8 +747,8 @@ export default function TriageScreen() {
             <Button variant="outline" onClick={() => setShowConfirmDialog(false)}>
               Cancel
             </Button>
-            <Button 
-              onClick={handleSubmit} 
+            <Button
+              onClick={handleSubmit}
               disabled={isSubmitting}
               className={cn(isCritical && "bg-esi-1 hover:bg-esi-1/90")}
             >

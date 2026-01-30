@@ -55,7 +55,7 @@ export function useTriageCases(options?: UseTriageCasesOptions) {
 
   // Real-time subscription
   useEffect(() => {
-    const channel = supabase
+    const triageChannel = supabase
       .channel('triage-cases-updates')
       .on(
         'postgres_changes',
@@ -70,8 +70,24 @@ export function useTriageCases(options?: UseTriageCasesOptions) {
       )
       .subscribe();
 
+    const patientChannel = supabase
+      .channel('patients-updates')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'patients',
+        },
+        () => {
+          queryClient.invalidateQueries({ queryKey: ['triage-cases'] });
+        }
+      )
+      .subscribe();
+
     return () => {
-      supabase.removeChannel(channel);
+      supabase.removeChannel(triageChannel);
+      supabase.removeChannel(patientChannel);
     };
   }, [queryClient]);
 
