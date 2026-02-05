@@ -109,6 +109,47 @@ export type Database = {
           },
         ]
       }
+      patient_documents: {
+        Row: {
+          ai_analysis: Json | null
+          created_at: string
+          file_path: string
+          file_size: number | null
+          file_type: string | null
+          id: string
+          patient_id: string
+          uploaded_by: string | null
+        }
+        Insert: {
+          ai_analysis?: Json | null
+          created_at?: string
+          file_path: string
+          file_size?: number | null
+          file_type?: string | null
+          id?: string
+          patient_id: string
+          uploaded_by?: string | null
+        }
+        Update: {
+          ai_analysis?: Json | null
+          created_at?: string
+          file_path?: string
+          file_size?: number | null
+          file_type?: string | null
+          id?: string
+          patient_id?: string
+          uploaded_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "patient_documents_patient_id_fkey"
+            columns: ["patient_id"]
+            isOneToOne: false
+            referencedRelation: "patients"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       patients: {
         Row: {
           allergies: string[] | null
@@ -212,6 +253,39 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      shift_handoffs: {
+        Row: {
+          acknowledged_at: string | null
+          created_at: string
+          id: string
+          notes: string | null
+          patient_ids: string[]
+          receiver_id: string | null
+          sender_id: string
+          status: string
+        }
+        Insert: {
+          acknowledged_at?: string | null
+          created_at?: string
+          id?: string
+          notes?: string | null
+          patient_ids: string[]
+          receiver_id?: string | null
+          sender_id: string
+          status?: string
+        }
+        Update: {
+          acknowledged_at?: string | null
+          created_at?: string
+          id?: string
+          notes?: string | null
+          patient_ids?: string[]
+          receiver_id?: string | null
+          sender_id?: string
+          status?: string
+        }
+        Relationships: []
       }
       triage_cases: {
         Row: {

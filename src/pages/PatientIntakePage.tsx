@@ -306,8 +306,8 @@ export default function PatientIntakePage() {
           .getPublicUrl(filePath);
 
         // Save metadata
-        const { data: docRecord, error: docError } = await supabase
-          .from('patient_documents')
+        const { data: docRecord, error: docError } = await (supabase
+          .from('patient_documents' as any)
           .insert({
             patient_id: patientId,
             file_path: filePath,
@@ -316,7 +316,7 @@ export default function PatientIntakePage() {
             uploaded_by: user.id
           })
           .select('id')
-          .single();
+          .single() as any);
 
         if (docError) {
           console.error('Database error saving doc:', docError);

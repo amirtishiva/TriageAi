@@ -71,12 +71,14 @@ export function ShiftHandoffDialog({ trigger }: ShiftHandoffDialogProps) {
 
         setIsSubmitting(true);
         try {
+            // Use the newly created shift_handoffs table
             const { error } = await (supabase
                 .from('shift_handoffs' as any)
                 .insert({
                     sender_id: user.id,
                     patient_ids: selectedPatientIds,
                     notes: notes,
+                    status: 'pending'
                 }) as any);
 
             if (error) throw error;

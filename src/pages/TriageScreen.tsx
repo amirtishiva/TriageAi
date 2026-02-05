@@ -502,7 +502,7 @@ export default function TriageScreen() {
                     </div>
 
                     {/* AI Analysis Result Display */}
-                    {doc.analysis_result && (
+                    {(doc as any).analysis_result && (
                       <div className="bg-background rounded p-2 text-xs border border-border mt-2 space-y-1">
                         <div className="flex items-center gap-1.5 text-primary mb-1">
                           <Sparkles className="h-3 w-3" />
