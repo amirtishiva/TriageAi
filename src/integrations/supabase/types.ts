@@ -14,52 +14,6 @@ export type Database = {
   }
   public: {
     Tables: {
-      patient_documents: {
-        Row: {
-          id: string
-          patient_id: string
-          file_path: string
-          file_type: string
-          file_size: number | null
-          analysis_result: Json | null
-          uploaded_by: string | null
-          created_at: string
-        }
-        Insert: {
-          id?: string
-          patient_id: string
-          file_path: string
-          file_type: string
-          file_size?: number | null
-          analysis_result?: Json | null
-          uploaded_by?: string | null
-          created_at?: string
-        }
-        Update: {
-          id?: string
-          patient_id?: string
-          file_path?: string
-          file_type?: string
-          file_size?: number | null
-          analysis_result?: Json | null
-          uploaded_by?: string | null
-          created_at?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "patient_documents_patient_id_fkey"
-            columns: ["patient_id"]
-            referencedRelation: "patients"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "patient_documents_uploaded_by_fkey"
-            columns: ["uploaded_by"]
-            referencedRelation: "users"
-            referencedColumns: ["id"]
-          }
-        ]
-      }
       audit_logs: {
         Row: {
           action: Database["public"]["Enums"]["audit_action"]
@@ -281,8 +235,8 @@ export type Database = {
           is_override: boolean | null
           override_notes: string | null
           override_rationale:
-          | Database["public"]["Enums"]["override_rationale"]
-          | null
+            | Database["public"]["Enums"]["override_rationale"]
+            | null
           patient_id: string
           status: Database["public"]["Enums"]["patient_status"]
           updated_at: string
@@ -311,8 +265,8 @@ export type Database = {
           is_override?: boolean | null
           override_notes?: string | null
           override_rationale?:
-          | Database["public"]["Enums"]["override_rationale"]
-          | null
+            | Database["public"]["Enums"]["override_rationale"]
+            | null
           patient_id: string
           status?: Database["public"]["Enums"]["patient_status"]
           updated_at?: string
@@ -341,8 +295,8 @@ export type Database = {
           is_override?: boolean | null
           override_notes?: string | null
           override_rationale?:
-          | Database["public"]["Enums"]["override_rationale"]
-          | null
+            | Database["public"]["Enums"]["override_rationale"]
+            | null
           patient_id?: string
           status?: Database["public"]["Enums"]["patient_status"]
           updated_at?: string
@@ -451,41 +405,41 @@ export type Database = {
     Enums: {
       app_role: "nurse" | "physician" | "senior_physician" | "charge_nurse"
       audit_action:
-      | "case_created"
-      | "ai_triage_completed"
-      | "triage_validated"
-      | "triage_overridden"
-      | "case_assigned"
-      | "case_acknowledged"
-      | "escalation_triggered"
-      | "escalation_resolved"
-      | "status_changed"
+        | "case_created"
+        | "ai_triage_completed"
+        | "triage_validated"
+        | "triage_overridden"
+        | "case_assigned"
+        | "case_acknowledged"
+        | "escalation_triggered"
+        | "escalation_resolved"
+        | "status_changed"
       escalation_reason: "timeout" | "unavailable" | "manual"
       escalation_status:
-      | "none"
-      | "pending"
-      | "level_1"
-      | "level_2"
-      | "level_3"
-      | "resolved"
+        | "none"
+        | "pending"
+        | "level_1"
+        | "level_2"
+        | "level_3"
+        | "resolved"
       esi_level: "1" | "2" | "3" | "4" | "5"
       override_rationale:
-      | "clinical_judgment"
-      | "additional_findings"
-      | "patient_history"
-      | "vital_change"
-      | "symptom_evolution"
-      | "family_concern"
-      | "other"
+        | "clinical_judgment"
+        | "additional_findings"
+        | "patient_history"
+        | "vital_change"
+        | "symptom_evolution"
+        | "family_concern"
+        | "other"
       patient_status:
-      | "waiting"
-      | "in_triage"
-      | "pending_validation"
-      | "validated"
-      | "assigned"
-      | "acknowledged"
-      | "in_treatment"
-      | "discharged"
+        | "waiting"
+        | "in_triage"
+        | "pending_validation"
+        | "validated"
+        | "assigned"
+        | "acknowledged"
+        | "in_treatment"
+        | "discharged"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -499,116 +453,116 @@ type DefaultSchema = DatabaseWithoutInternals[Extract<keyof Database, "public">]
 
 export type Tables<
   DefaultSchemaTableNameOrOptions extends
-  | keyof (DefaultSchema["Tables"] & DefaultSchema["Views"])
-  | { schema: keyof DatabaseWithoutInternals },
+    | keyof (DefaultSchema["Tables"] & DefaultSchema["Views"])
+    | { schema: keyof DatabaseWithoutInternals },
   TableName extends DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
-  ? keyof (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
-    DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Views"])
-  : never = never,
+    ? keyof (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
+        DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Views"])
+    : never = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
   ? (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
-    DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Views"])[TableName] extends {
+      DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Views"])[TableName] extends {
       Row: infer R
     }
-  ? R
-  : never
+    ? R
+    : never
   : DefaultSchemaTableNameOrOptions extends keyof (DefaultSchema["Tables"] &
-    DefaultSchema["Views"])
-  ? (DefaultSchema["Tables"] &
-    DefaultSchema["Views"])[DefaultSchemaTableNameOrOptions] extends {
-      Row: infer R
-    }
-  ? R
-  : never
-  : never
+        DefaultSchema["Views"])
+    ? (DefaultSchema["Tables"] &
+        DefaultSchema["Views"])[DefaultSchemaTableNameOrOptions] extends {
+        Row: infer R
+      }
+      ? R
+      : never
+    : never
 
 export type TablesInsert<
   DefaultSchemaTableNameOrOptions extends
-  | keyof DefaultSchema["Tables"]
-  | { schema: keyof DatabaseWithoutInternals },
+    | keyof DefaultSchema["Tables"]
+    | { schema: keyof DatabaseWithoutInternals },
   TableName extends DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
-  ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
-  : never = never,
+    ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
+    : never = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
   ? DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"][TableName] extends {
-    Insert: infer I
-  }
-  ? I
-  : never
+      Insert: infer I
+    }
+    ? I
+    : never
   : DefaultSchemaTableNameOrOptions extends keyof DefaultSchema["Tables"]
-  ? DefaultSchema["Tables"][DefaultSchemaTableNameOrOptions] extends {
-    Insert: infer I
-  }
-  ? I
-  : never
-  : never
+    ? DefaultSchema["Tables"][DefaultSchemaTableNameOrOptions] extends {
+        Insert: infer I
+      }
+      ? I
+      : never
+    : never
 
 export type TablesUpdate<
   DefaultSchemaTableNameOrOptions extends
-  | keyof DefaultSchema["Tables"]
-  | { schema: keyof DatabaseWithoutInternals },
+    | keyof DefaultSchema["Tables"]
+    | { schema: keyof DatabaseWithoutInternals },
   TableName extends DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
-  ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
-  : never = never,
+    ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
+    : never = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
   ? DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"][TableName] extends {
-    Update: infer U
-  }
-  ? U
-  : never
+      Update: infer U
+    }
+    ? U
+    : never
   : DefaultSchemaTableNameOrOptions extends keyof DefaultSchema["Tables"]
-  ? DefaultSchema["Tables"][DefaultSchemaTableNameOrOptions] extends {
-    Update: infer U
-  }
-  ? U
-  : never
-  : never
+    ? DefaultSchema["Tables"][DefaultSchemaTableNameOrOptions] extends {
+        Update: infer U
+      }
+      ? U
+      : never
+    : never
 
 export type Enums<
   DefaultSchemaEnumNameOrOptions extends
-  | keyof DefaultSchema["Enums"]
-  | { schema: keyof DatabaseWithoutInternals },
+    | keyof DefaultSchema["Enums"]
+    | { schema: keyof DatabaseWithoutInternals },
   EnumName extends DefaultSchemaEnumNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
-  ? keyof DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"]
-  : never = never,
+    ? keyof DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"]
+    : never = never,
 > = DefaultSchemaEnumNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
   ? DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"][EnumName]
   : DefaultSchemaEnumNameOrOptions extends keyof DefaultSchema["Enums"]
-  ? DefaultSchema["Enums"][DefaultSchemaEnumNameOrOptions]
-  : never
+    ? DefaultSchema["Enums"][DefaultSchemaEnumNameOrOptions]
+    : never
 
 export type CompositeTypes<
   PublicCompositeTypeNameOrOptions extends
-  | keyof DefaultSchema["CompositeTypes"]
-  | { schema: keyof DatabaseWithoutInternals },
+    | keyof DefaultSchema["CompositeTypes"]
+    | { schema: keyof DatabaseWithoutInternals },
   CompositeTypeName extends PublicCompositeTypeNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
-  ? keyof DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"]
-  : never = never,
+    ? keyof DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"]
+    : never = never,
 > = PublicCompositeTypeNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
   ? DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"][CompositeTypeName]
   : PublicCompositeTypeNameOrOptions extends keyof DefaultSchema["CompositeTypes"]
-  ? DefaultSchema["CompositeTypes"][PublicCompositeTypeNameOrOptions]
-  : never
+    ? DefaultSchema["CompositeTypes"][PublicCompositeTypeNameOrOptions]
+    : never
 
 export const Constants = {
   public: {
